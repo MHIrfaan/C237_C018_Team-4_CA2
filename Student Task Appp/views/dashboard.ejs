@@ -363,9 +363,12 @@
     </div>
 </div>
 
+<script id="tasks-data" type="application/json">
+<%- JSON.stringify(tasks || []) %>
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const tasks = <%- JSON.stringify(tasks || []) %>;
+    const tasks = JSON.parse(document.getElementById('tasks-data').textContent || '[]');
     const calendarGrid = document.getElementById('calendarGrid');
     const upcomingList = document.getElementById('upcomingList');
     const calendarMonth = document.getElementById('calendarMonth');
