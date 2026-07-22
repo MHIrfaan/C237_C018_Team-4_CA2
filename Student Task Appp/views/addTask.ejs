@@ -84,7 +84,7 @@
                     </div>
                     <div class="col-md-6 mb-4">
                         <label class="form-label fw-semibold text-dark">Deadline</label>
-                        <input type="date" class="form-control" name="deadline" required>
+                        <input type="date" class="form-control" name="deadline" value="<%= typeof defaultDeadline !== 'undefined' ? defaultDeadline : '' %>" required>
                     </div>
                 </div>
 
