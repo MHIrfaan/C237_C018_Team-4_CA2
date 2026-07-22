@@ -178,7 +178,8 @@ app.get('/dashboard', checkAuth, (req, res) => {
 
 // --- ADD TASK (CREATE) ---
 app.get('/task/add', checkAuth, (req, res) => {
-    res.render('addTask');
+    const defaultDeadline = req.query.deadline || '';
+    res.render('addTask', { defaultDeadline });
 });
 
 app.post('/task/add', checkAuth, (req, res) => {
