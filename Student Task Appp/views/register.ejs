@@ -87,13 +87,11 @@
                     <input type="email" class="form-control" name="email" value="<%= email %>" required>
                 </div>
 
-                <!-- NEW ROLE SELECTOR -->
+                <!-- SECRET ADMIN CODE (Optional) -->
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Account Role</label>
-                    <select class="form-select" name="role" required>
-                        <option value="student" <%= role === 'student' ? 'selected' : '' %>>Student</option>
-                        <option value="admin" <%= role === 'admin' ? 'selected' : '' %>>Admin</option>
-                    </select>
+                    <label class="form-label fw-semibold text-dark">Admin Code (Optional)</label>
+                    <input type="password" class="form-control" name="adminCode" placeholder="Leave blank if you are a student">
+                    <div class="form-text small mt-1">Only enter a code if you are registering as an administrator.</div>
                 </div>
 
                 <div class="row">

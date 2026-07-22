@@ -69,26 +69,31 @@ app.get('/', (req, res) => {
 
 // --- REGISTER ---
 app.get('/register', (req, res) => {
-    // Include 'role' in the empty values so the EJS template doesn't crash
     res.render('register', {
         error: null, success: null,
-        username: '', email: '', address: '', contact: '', role: 'student'
+        username: '', email: '', address: '', contact: ''
     });
 });
 
 app.post('/register', (req, res) => {
-    // Extract 'role' from the submitted form data
-    const { username, email, password, confirmPassword, address, contact, role } = req.body;
+    // Extract adminCode instead of role
+    const { username, email, password, confirmPassword, address, contact, adminCode } = req.body;
+
+    // Check the secret code to determine the role
+    let assignedRole = 'student';
+    if (adminCode === 'C237ADMIN') {
+        assignedRole = 'admin';
+    }
 
     const renderError = (msg) => {
         return res.render('register', {
             error: msg, success: null,
-            username, email, address, contact, role 
+            username, email, address, contact 
         });
     };
 
-    // Ensure 'role' is also validated
-    if (!username || !email || !password || !confirmPassword || !address || !contact || !role) {
+    // Validation
+    if (!username || !email || !password || !confirmPassword || !address || !contact) {
         return renderError("Please fill in all fields.");
     }
     if (password.length < 6) {
@@ -105,18 +110,17 @@ app.post('/register', (req, res) => {
             return renderError("Username or Email already exists.");
         }
 
-        // Replaced hardcoded 'student' with a dynamic '?' parameter
         const insertSql = `
         INSERT INTO users (username,email,password,address,contact,role)
         VALUES (?, ?, SHA1(?), ?, ?, ?)`;
 
-        // Pass 'role' into the query array
-        db.query(insertSql, [username, email, password, address, contact, role], (err, result) => {
+        // Pass the assignedRole into the database
+        db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed");
             res.render('register', {
                 error: null, 
                 success: "Registration successful! You will now be redirected to login.",
-                username: '', email: '', address: '', contact: '', role: 'student'
+                username: '', email: '', address: '', contact: ''
             });
         });
     });
@@ -295,7 +299,6 @@ app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
         res.redirect('/admin');
     });
 });
-
 
 // ======================
 // SERVER
