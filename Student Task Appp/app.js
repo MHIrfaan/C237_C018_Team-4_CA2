@@ -76,14 +76,8 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    // Extract adminCode instead of role
+    // Extract the new adminCode from the form
     const { username, email, password, confirmPassword, address, contact, adminCode } = req.body;
-
-    // Check the secret code to determine the role
-    let assignedRole = 'student';
-    if (adminCode === 'C237ADMIN') {
-        assignedRole = 'admin';
-    }
 
     const renderError = (msg) => {
         return res.render('register', {
@@ -92,9 +86,24 @@ app.post('/register', (req, res) => {
         });
     };
 
-    // Validation
+    // ==========================================
+    // STRICT ADMIN CODE VALIDATION
+    // ==========================================
+    let assignedRole = 'student'; // Default to student
+    
+    // Check if the user typed ANYTHING into the admin code box
+    if (adminCode && adminCode.trim() !== '') {
+        if (adminCode === 'C237ADMIN') {
+            assignedRole = 'admin'; // Correct code -> make them an admin
+        } else {
+            // Incorrect code -> throw an error!
+            return renderError("Invalid Admin Code. Leave this blank if you are a student.");
+        }
+    }
+    // ==========================================
+
     if (!username || !email || !password || !confirmPassword || !address || !contact) {
-        return renderError("Please fill in all fields.");
+        return renderError("Please fill in all required fields.");
     }
     if (password.length < 6) {
         return renderError("Password must be at least 6 characters.");
@@ -114,7 +123,7 @@ app.post('/register', (req, res) => {
         INSERT INTO users (username,email,password,address,contact,role)
         VALUES (?, ?, SHA1(?), ?, ?, ?)`;
 
-        // Pass the assignedRole into the database
+        // Save the assignedRole (either 'student' or 'admin') to the database
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed");
             res.render('register', {
@@ -214,13 +223,11 @@ app.post('/task/complete/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
 
-    // First check the task belongs to this user, and get its current status
     const checkSql = `SELECT status FROM tasks WHERE id = ? AND user_id = ?`;
     db.query(checkSql, [taskId, userId], (err, results) => {
         if (err) return res.send("Error checking task.");
         if (results.length === 0) return res.send("Task not found.");
 
-        // Toggle: Pending -> Completed, Completed -> Pending
         const newStatus = results[0].status === 'Completed' ? 'Pending' : 'Completed';
 
         const updateSql = `UPDATE tasks SET status = ? WHERE id = ? AND user_id = ?`;
@@ -249,11 +256,9 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    // 1. Get all users for User Management
     db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users.");
 
-        // 2. Get all tasks across the app for Content/Progress Monitoring
         const taskSql = `
             SELECT tasks.id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 
@@ -264,7 +269,6 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
         db.query(taskSql, (err, allTasks) => {
             if (err) return res.send("Error loading tasks.");
 
-            // 3. Simple Analytics
             const totalUsers = allUsers.length;
             const totalTasks = allTasks.length;
             const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
@@ -280,10 +284,8 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     });
 });
 
-// Admin Route: Delete a user
 app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     const userIdToDelete = req.params.id;
-    // Safety check: Don't let an admin delete themselves!
     if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
 
     db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
@@ -292,7 +294,6 @@ app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     });
 });
 
-// Admin Route: Delete ANY task
 app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
     db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
         if (err) return res.send("Error deleting task.");
