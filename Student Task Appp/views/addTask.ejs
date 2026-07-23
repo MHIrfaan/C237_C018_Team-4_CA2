@@ -2,99 +2,305 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Add Study Task</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    >
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f4f7f6 !important;
             color: #2b3440;
         }
+
         .card {
             border: none;
             border-radius: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
         }
-        .form-control, .form-select {
+
+        .form-control,
+        .form-select {
             border-radius: 10px;
             padding: 0.75rem 1rem;
             border-color: #e2e8f0;
             background-color: #f8fafc;
         }
-        .form-control:focus, .form-select:focus {
+
+        .form-control:focus,
+        .form-select:focus {
             box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15);
             border-color: #0d6efd;
             background-color: #ffffff;
         }
+
         .btn {
             border-radius: 10px;
             padding: 0.75rem 1.5rem;
             font-weight: 600;
         }
+
+        .required-symbol {
+            color: red;
+        }
     </style>
 </head>
+
 <body>
 
 <div class="container mt-5 py-4">
+
     <div class="card mx-auto" style="max-width: 600px;">
+
         <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
-            <h3 class="text-primary fw-bold mb-0">Create New Task</h3>
-            <p class="text-muted small mt-1">Organize your study schedule</p>
+            <h3 class="text-primary fw-bold mb-0">
+                Create New Task
+            </h3>
+
+            <p class="text-muted small mt-1">
+                Organise your study schedule
+            </p>
         </div>
+
         <div class="card-body p-4">
+
+            <!-- Display server-side validation error -->
+            <% if (typeof error !== 'undefined' && error) { %>
+                <div class="alert alert-danger" role="alert">
+                    <%= error %>
+                </div>
+            <% } %>
+
             <form action="/task/add" method="POST">
+
+                <!-- Task title -->
                 <div class="mb-4">
-                    <label class="form-label fw-semibold text-dark">Task Title</label>
-                    <input type="text" class="form-control" name="title" placeholder="e.g. Chapter 4 Reading" required>
+                    <label class="form-label fw-semibold text-dark">
+                        Task Title
+                        <span class="required-symbol">*</span>
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        name="title"
+                        maxlength="150"
+                        placeholder="e.g. Chapter 4 Reading"
+                        value="<%= typeof formData !== 'undefined' && formData.title ? formData.title : '' %>"
+                        required
+                    >
                 </div>
 
+                <!-- Description -->
                 <div class="mb-4">
-                    <label class="form-label fw-semibold text-dark">Description</label>
-                    <textarea class="form-control" name="description" rows="3" placeholder="Add notes, requirements, or links..."></textarea>
+                    <label class="form-label fw-semibold text-dark">
+                        Description
+                    </label>
+
+                    <textarea
+                        class="form-control"
+                        name="description"
+                        rows="3"
+                        maxlength="1000"
+                        placeholder="Add notes, requirements, or links..."
+                    ><%= typeof formData !== 'undefined' && formData.description ? formData.description : '' %></textarea>
                 </div>
 
                 <div class="row">
+
+                    <!-- Module -->
                     <div class="col-md-6 mb-4">
-                        <label class="form-label fw-semibold text-dark">Module</label>
-                        <input type="text" class="form-control" name="module" placeholder="e.g. C237" required>
+                        <label class="form-label fw-semibold text-dark">
+                            Module
+                            <span class="required-symbol">*</span>
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            name="module"
+                            maxlength="100"
+                            placeholder="e.g. C237"
+                            value="<%= typeof formData !== 'undefined' && formData.module ? formData.module : '' %>"
+                            required
+                        >
                     </div>
+
+                    <!-- Task type -->
                     <div class="col-md-6 mb-4">
-                        <label class="form-label fw-semibold text-dark">Task Type</label>
-                        <select class="form-select" name="task_type" required>
-                            <option value="">-- Select Type --</option>
-                            <option value="Assignment">Assignment</option>
-                            <option value="Quiz">Quiz</option>
-                            <option value="Project">Project</option>
-                            <option value="Exam">Exam</option>
-                            <option value="Revision">Revision</option>
+                        <label class="form-label fw-semibold text-dark">
+                            Task Type
+                            <span class="required-symbol">*</span>
+                        </label>
+
+                        <select
+                            class="form-select"
+                            name="task_type"
+                            required
+                        >
+                            <option value="">
+                                -- Select Type --
+                            </option>
+
+                            <option
+                                value="Assignment"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Assignment'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Assignment
+                            </option>
+
+                            <option
+                                value="Quiz"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Quiz'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Quiz
+                            </option>
+
+                            <option
+                                value="Project"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Project'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Project
+                            </option>
+
+                            <option
+                                value="Exam"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Exam'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Exam
+                            </option>
+
+                            <option
+                                value="Revision"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Revision'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Revision
+                            </option>
                         </select>
                     </div>
+
                 </div>
 
                 <div class="row">
+
+                    <!-- Priority -->
                     <div class="col-md-6 mb-4">
-                        <label class="form-label fw-semibold text-dark">Priority</label>
-                        <select class="form-select" name="priority" required>
-                            <option value="">-- Select Priority --</option>
-                            <option value="High">🔴 High</option>
-                            <option value="Medium">🟠 Medium</option>
-                            <option value="Low">🟢 Low</option>
+                        <label class="form-label fw-semibold text-dark">
+                            Priority
+                            <span class="required-symbol">*</span>
+                        </label>
+
+                        <select
+                            class="form-select"
+                            name="priority"
+                            required
+                        >
+                            <option value="">
+                                -- Select Priority --
+                            </option>
+
+                            <option
+                                value="High"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.priority === 'High'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                🔴 High
+                            </option>
+
+                            <option
+                                value="Medium"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.priority === 'Medium'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                🟠 Medium
+                            </option>
+
+                            <option
+                                value="Low"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.priority === 'Low'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                🟢 Low
+                            </option>
                         </select>
                     </div>
+
+                    <!-- Deadline -->
                     <div class="col-md-6 mb-4">
-                        <label class="form-label fw-semibold text-dark">Deadline</label>
-                        <input type="date" class="form-control" name="deadline" value="<%= typeof defaultDeadline !== 'undefined' ? defaultDeadline : '' %>" required>
+                        <label class="form-label fw-semibold text-dark">
+                            Deadline
+                            <span class="required-symbol">*</span>
+                        </label>
+
+                        <input
+                            type="date"
+                            class="form-control"
+                            name="deadline"
+                            value="<%= typeof formData !== 'undefined' &&
+                                formData.deadline
+                                ? formData.deadline
+                                : '' %>"
+                            required
+                        >
                     </div>
+
                 </div>
 
+                <!-- Buttons -->
                 <div class="d-flex gap-3 pt-2">
-                    <button type="submit" class="btn btn-primary w-50">Save Task</button>
-                    <a href="/dashboard" class="btn btn-light border w-50 text-dark">Cancel</a>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary w-50"
+                    >
+                        Save Task
+                    </button>
+
+                    <a
+                        href="/dashboard"
+                        class="btn btn-light border w-50 text-dark"
+                    >
+                        Cancel
+                    </a>
+
                 </div>
+
             </form>
+
         </div>
     </div>
+
 </div>
 
 </body>
