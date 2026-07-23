@@ -179,16 +179,154 @@ app.get('/dashboard', checkAuth, (req, res) => {
 // --- ADD TASK (CREATE) ---
 app.get('/task/add', checkAuth, (req, res) => {
     const defaultDeadline = req.query.deadline || '';
-    res.render('addTask', { defaultDeadline });
+
+    res.render('addTask', {
+        error: null,
+        formData: {
+            deadline: defaultDeadline
+        }
+    });
 });
 
 app.post('/task/add', checkAuth, (req, res) => {
-    const user_id = req.session.user.id;
-    const { title, description, module, task_type, priority, deadline } = req.body;
-    const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    const userId = req.session.user.id;
 
-    db.query(sql, [user_id, title, description, module, task_type, priority, deadline, 'Pending'], (err, results) => {
-        if (err) return res.send("Error adding task.");
+    let {
+        title,
+        description,
+        module,
+        task_type,
+        priority,
+        deadline
+    } = req.body;
+
+    // Remove unnecessary spaces
+    title = title ? title.trim() : '';
+    description = description ? description.trim() : '';
+    module = module ? module.trim().toUpperCase() : '';
+
+    const formData = {
+        title,
+        description,
+        module,
+        task_type,
+        priority,
+        deadline
+    };
+
+    const validTaskTypes = [
+        'Assignment',
+        'Quiz',
+        'Project',
+        'Exam',
+        'Revision'
+    ];
+
+    const validPriorities = [
+        'High',
+        'Medium',
+        'Low'
+    ];
+
+    // Check required fields
+    if (
+        !title ||
+        !module ||
+        !task_type ||
+        !priority ||
+        !deadline
+    ) {
+        return res.render('addTask', {
+            error: 'Please complete all required fields.',
+            formData
+        });
+    }
+
+    // Check title length
+    if (title.length > 150) {
+        return res.render('addTask', {
+            error: 'Task title cannot exceed 150 characters.',
+            formData
+        });
+    }
+
+    // Check module length
+    if (module.length > 100) {
+        return res.render('addTask', {
+            error: 'Module cannot exceed 100 characters.',
+            formData
+        });
+    }
+
+    // Check accepted task type
+    if (!validTaskTypes.includes(task_type)) {
+        return res.render('addTask', {
+            error: 'Please select a valid task type.',
+            formData
+        });
+    }
+
+    // Check accepted priority
+    if (!validPriorities.includes(priority)) {
+        return res.render('addTask', {
+            error: 'Please select a valid priority.',
+            formData
+        });
+    }
+
+    // Check deadline
+    const selectedDate = new Date(deadline);
+    const today = new Date();
+
+    selectedDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
+    if (
+        Number.isNaN(selectedDate.getTime()) ||
+        selectedDate < today
+    ) {
+        return res.render('addTask', {
+            error: 'The deadline cannot be before today.',
+            formData
+        });
+    }
+
+    const sql = `
+        INSERT INTO tasks
+        (
+            user_id,
+            title,
+            description,
+            module,
+            task_type,
+            priority,
+            deadline,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+        userId,
+        title,
+        description || null,
+        module,
+        task_type,
+        priority,
+        deadline,
+        'Pending'
+    ];
+
+    db.query(sql, values, (err, results) => {
+        if (err) {
+            console.error('Error adding task:', err);
+
+            return res.render('addTask', {
+                error: 'Unable to add the task. Please try again.',
+                formData
+            });
+        }
+
         res.redirect('/dashboard');
     });
 });
