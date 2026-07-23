@@ -63,6 +63,7 @@
     <div class="card mx-auto" style="max-width: 600px;">
 
         <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
+
             <h3 class="text-primary fw-bold mb-0">
                 Create New Task
             </h3>
@@ -70,11 +71,11 @@
             <p class="text-muted small mt-1">
                 Organise your study schedule
             </p>
+
         </div>
 
         <div class="card-body p-4">
 
-            <!-- Display server-side validation error -->
             <% if (typeof error !== 'undefined' && error) { %>
                 <div class="alert alert-danger" role="alert">
                     <%= error %>
@@ -85,6 +86,7 @@
 
                 <!-- Task title -->
                 <div class="mb-4">
+
                     <label class="form-label fw-semibold text-dark">
                         Task Title
                         <span class="required-symbol">*</span>
@@ -96,13 +98,18 @@
                         name="title"
                         maxlength="150"
                         placeholder="e.g. Chapter 4 Reading"
-                        value="<%= typeof formData !== 'undefined' && formData.title ? formData.title : '' %>"
+                        value="<%= typeof formData !== 'undefined' &&
+                            formData.title
+                            ? formData.title
+                            : '' %>"
                         required
                     >
+
                 </div>
 
                 <!-- Description -->
                 <div class="mb-4">
+
                     <label class="form-label fw-semibold text-dark">
                         Description
                     </label>
@@ -113,13 +120,18 @@
                         rows="3"
                         maxlength="1000"
                         placeholder="Add notes, requirements, or links..."
-                    ><%= typeof formData !== 'undefined' && formData.description ? formData.description : '' %></textarea>
+                    ><%= typeof formData !== 'undefined' &&
+                        formData.description
+                        ? formData.description
+                        : '' %></textarea>
+
                 </div>
 
                 <div class="row">
 
                     <!-- Module -->
                     <div class="col-md-6 mb-4">
+
                         <label class="form-label fw-semibold text-dark">
                             Module
                             <span class="required-symbol">*</span>
@@ -131,13 +143,18 @@
                             name="module"
                             maxlength="100"
                             placeholder="e.g. C237"
-                            value="<%= typeof formData !== 'undefined' && formData.module ? formData.module : '' %>"
+                            value="<%= typeof formData !== 'undefined' &&
+                                formData.module
+                                ? formData.module
+                                : '' %>"
                             required
                         >
+
                     </div>
 
                     <!-- Task type -->
                     <div class="col-md-6 mb-4">
+
                         <label class="form-label fw-semibold text-dark">
                             Task Type
                             <span class="required-symbol">*</span>
@@ -148,6 +165,7 @@
                             name="task_type"
                             required
                         >
+
                             <option value="">
                                 -- Select Type --
                             </option>
@@ -173,16 +191,6 @@
                             </option>
 
                             <option
-                                value="Project"
-                                <%= typeof formData !== 'undefined' &&
-                                    formData.task_type === 'Project'
-                                    ? 'selected'
-                                    : '' %>
-                            >
-                                Project
-                            </option>
-
-                            <option
                                 value="Exam"
                                 <%= typeof formData !== 'undefined' &&
                                     formData.task_type === 'Exam'
@@ -193,15 +201,27 @@
                             </option>
 
                             <option
-                                value="Revision"
+                                value="Project"
                                 <%= typeof formData !== 'undefined' &&
-                                    formData.task_type === 'Revision'
+                                    formData.task_type === 'Project'
                                     ? 'selected'
                                     : '' %>
                             >
-                                Revision
+                                Project
                             </option>
+
+                            <option
+                                value="Study Session"
+                                <%= typeof formData !== 'undefined' &&
+                                    formData.task_type === 'Study Session'
+                                    ? 'selected'
+                                    : '' %>
+                            >
+                                Study Session
+                            </option>
+
                         </select>
+
                     </div>
 
                 </div>
@@ -210,6 +230,7 @@
 
                     <!-- Priority -->
                     <div class="col-md-6 mb-4">
+
                         <label class="form-label fw-semibold text-dark">
                             Priority
                             <span class="required-symbol">*</span>
@@ -220,6 +241,7 @@
                             name="priority"
                             required
                         >
+
                             <option value="">
                                 -- Select Priority --
                             </option>
@@ -253,11 +275,14 @@
                             >
                                 🟢 Low
                             </option>
+
                         </select>
+
                     </div>
 
                     <!-- Deadline -->
                     <div class="col-md-6 mb-4">
+
                         <label class="form-label fw-semibold text-dark">
                             Deadline
                             <span class="required-symbol">*</span>
@@ -273,11 +298,11 @@
                                 : '' %>"
                             required
                         >
+
                     </div>
 
                 </div>
 
-                <!-- Buttons -->
                 <div class="d-flex gap-3 pt-2">
 
                     <button

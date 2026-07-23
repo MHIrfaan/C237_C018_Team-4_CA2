@@ -176,18 +176,24 @@ app.get('/dashboard', checkAuth, (req, res) => {
     });
 });
 
-// --- ADD TASK (CREATE) ---
+// Display add-task page
 app.get('/task/add', checkAuth, (req, res) => {
     const defaultDeadline = req.query.deadline || '';
 
     res.render('addTask', {
         error: null,
         formData: {
+            title: '',
+            description: '',
+            module: '',
+            task_type: '',
+            priority: '',
             deadline: defaultDeadline
         }
     });
 });
 
+// Add task to database
 app.post('/task/add', checkAuth, (req, res) => {
     const userId = req.session.user.id;
 
@@ -200,7 +206,6 @@ app.post('/task/add', checkAuth, (req, res) => {
         deadline
     } = req.body;
 
-    // Remove unnecessary spaces
     title = title ? title.trim() : '';
     description = description ? description.trim() : '';
     module = module ? module.trim().toUpperCase() : '';
@@ -217,9 +222,9 @@ app.post('/task/add', checkAuth, (req, res) => {
     const validTaskTypes = [
         'Assignment',
         'Quiz',
-        'Project',
         'Exam',
-        'Revision'
+        'Project',
+        'Study Session'
     ];
 
     const validPriorities = [
@@ -228,7 +233,7 @@ app.post('/task/add', checkAuth, (req, res) => {
         'Low'
     ];
 
-    // Check required fields
+    // Required field validation
     if (
         !title ||
         !module ||
@@ -242,7 +247,7 @@ app.post('/task/add', checkAuth, (req, res) => {
         });
     }
 
-    // Check title length
+    // Title validation
     if (title.length > 150) {
         return res.render('addTask', {
             error: 'Task title cannot exceed 150 characters.',
@@ -250,7 +255,15 @@ app.post('/task/add', checkAuth, (req, res) => {
         });
     }
 
-    // Check module length
+    // Description validation
+    if (description.length > 1000) {
+        return res.render('addTask', {
+            error: 'Description cannot exceed 1000 characters.',
+            formData
+        });
+    }
+
+    // Module validation
     if (module.length > 100) {
         return res.render('addTask', {
             error: 'Module cannot exceed 100 characters.',
@@ -258,7 +271,7 @@ app.post('/task/add', checkAuth, (req, res) => {
         });
     }
 
-    // Check accepted task type
+    // Task type validation
     if (!validTaskTypes.includes(task_type)) {
         return res.render('addTask', {
             error: 'Please select a valid task type.',
@@ -266,7 +279,7 @@ app.post('/task/add', checkAuth, (req, res) => {
         });
     }
 
-    // Check accepted priority
+    // Priority validation
     if (!validPriorities.includes(priority)) {
         return res.render('addTask', {
             error: 'Please select a valid priority.',
@@ -274,17 +287,20 @@ app.post('/task/add', checkAuth, (req, res) => {
         });
     }
 
-    // Check deadline
-    const selectedDate = new Date(deadline);
+    // Deadline validation
+    const selectedDeadline = new Date(`${deadline}T00:00:00`);
     const today = new Date();
 
-    selectedDate.setHours(0, 0, 0, 0);
     today.setHours(0, 0, 0, 0);
 
-    if (
-        Number.isNaN(selectedDate.getTime()) ||
-        selectedDate < today
-    ) {
+    if (Number.isNaN(selectedDeadline.getTime())) {
+        return res.render('addTask', {
+            error: 'Please enter a valid deadline.',
+            formData
+        });
+    }
+
+    if (selectedDeadline < today) {
         return res.render('addTask', {
             error: 'The deadline cannot be before today.',
             formData
