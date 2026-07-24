@@ -406,13 +406,10 @@
                                             </td>
                                         </tr>
                                         <% } else { %>
-                                            <% tasks.forEach(task=> { %>
-                                                <% tasks.forEach(task => { %>
-                                                <tr class="<%= task.status === 'Completed' ? 'task-completed' : '' %>">
-                                                <tr data-module="<%= task.module %>" data-status="<%= task.status %>"
-                                                    data-deadline="<%= task.deadline %>">
-                                                    <td class="fw-semibold text-dark">
-                                                        <%= task.title %>
+                                            <% tasks.forEach(task => { %>
+                                            <tr class="<%= task.status === 'Completed' ? 'task-completed' : '' %>" data-module="<%= task.module %>" data-status="<%= task.status %>" data-deadline="<%= task.deadline %>">
+                                            <td class="fw-semibold text-dark">
+                                                <%= task.title %>
                                                     </td>
                                                     <td><span
                                                             class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">
