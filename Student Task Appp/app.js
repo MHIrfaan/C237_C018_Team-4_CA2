@@ -189,14 +189,35 @@ app.get('/profile/edit', checkAuth, (req, res) => {
 // Multer handles the image upload, SQL only handles the text details!
 app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
-    const { username, email, contact, address } = req.body;
+    const { username, email, contact, address, currentImage } = req.body;
 
-    const sql = `UPDATE users SET username=?, email=?, address=?, contact=? WHERE id=?`;
-    db.query(sql, [username, email, address, contact, userId], (err) => {
-        if (err) return res.send("Error updating profile.");
-        req.session.user.username = username;
-        res.redirect('/dashboard');
-    });
+    let profilePic = currentImage || 'profile_icon.webp';
+
+    if (req.file) {
+        profilePic = req.file.filename;
+    }
+
+    const sql = `
+        UPDATE users
+        SET username=?, email=?, address=?, contact=?, profile_pic=?
+        WHERE id=?
+    `;
+
+    db.query(
+        sql,
+        [username, email, address, contact, profilePic, userId],
+        (err) => {
+            if (err) {
+                console.error("Error updating profile:", err);
+                return res.send("Error updating profile.");
+            }
+
+            req.session.user.username = username;
+            req.session.user.profile_pic = profilePic;
+
+            res.redirect('/dashboard');
+        }
+    );
 });
 
 // --- STUDENT DASHBOARD (READ) ---
