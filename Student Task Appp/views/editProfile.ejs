@@ -19,19 +19,17 @@
     <div class="card mx-auto" style="max-width: 600px;">
         <div class="card-header bg-white border-0 pt-4 px-4 pb-0 text-center">
             <h3 class="text-primary fw-bold mb-0">Update Profile</h3>
-            <p class="text-muted small mt-1">Make changes to your personal details</p>
+            <p class="text-muted small mt-1">Update your details and add a profile picture</p>
         </div>
         
         <div class="card-body p-4">
             <form action="/profile/edit" method="POST" enctype="multipart/form-data">
                 
                 <div class="text-center mb-4">
-                    <!-- Updated to use userProfile.image dynamically from the database -->
-                    <img src="/images/<%= userProfile.image || 'profile_icon.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
+                    <!-- Magic Trick: Tries to load the user's ID file. If missing, loads students.png -->
+                    <img src="/images/profile_<%= user.id %>.jpg" onerror="this.onerror=null; this.src='/images/icon_profile.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
                     <div>
                         <label class="form-label fw-semibold text-dark small">Upload New Avatar</label>
-                        <!-- Retains existing image if user updates name/email but doesn't upload a new file -->
-                        <input type="hidden" name="currentImage" value="<%= userProfile.image || 'profile_icon.webp' %>">
                         <input type="file" class="form-control form-control-sm mx-auto" style="max-width: 250px;" name="image" accept="image/*">
                     </div>
                 </div>

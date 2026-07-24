@@ -99,6 +99,7 @@ app.post('/register', (req, res) => {
 
     let assignedRole = 'student'; 
     
+    // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
         if (adminCode === 'admin') { 
             assignedRole = 'admin'; 
@@ -124,10 +125,10 @@ app.post('/register', (req, res) => {
             return renderError("Username or Email already exists.");
         }
 
-        // FIXED: Swapped profile_pic for image, and set default to profile_icon_3.webp
+        // Inserting the default profile picture into the database
         const insertSql = `
-        INSERT INTO users (username,email,password,address,contact,role,image)
-        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon_3.webp')`;
+        INSERT INTO users (username,email,password,address,contact,role,profile_pic)
+        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
 
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed: " + err.message);
@@ -164,7 +165,7 @@ app.post('/login', (req, res) => {
             id: user.id, 
             username: user.username, 
             role: user.role,
-            image: user.image || 'profile_icon_3.webp' 
+            profile_pic: user.profile_pic || 'profile_icon.webp' 
         };
 
         if (user.role === "admin") return res.redirect('/admin');
@@ -181,26 +182,30 @@ app.get('/profile/edit', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     db.query('SELECT * FROM users WHERE id = ?', [userId], (err, results) => {
         if (err || results.length === 0) return res.send("User not found.");
-        res.render('editProfile', { userProfile: results[0], user: req.session.user });
+        
+        let userProfile = results[0];
+        // Map database profile_pic to image so editProfile.ejs populates the value correctly
+        userProfile.image = userProfile.profile_pic; 
+        
+        res.render('editProfile', { userProfile: userProfile, user: req.session.user });
     });
 });
 
-app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
+// Handling profile edits (Text only via EJS form, multer upload.single removed)
+app.post('/profile/edit', checkAuth, (req, res) => {
     const userId = req.session.user.id;
-    const { username, email, contact, address, currentImage } = req.body;
+    const { username, email, contact, address, image } = req.body;
 
-    let image = currentImage || 'profile_icon_3.webp'; 
-    if (req.file) {
-        image = req.file.filename; 
-    }
+    // Use submitted text input or fallback to default
+    let profile_pic = image || 'profile_icon.webp'; 
 
-    // FIXED: Swapped profile_pic for image
-    const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, image=? WHERE id=?`;
-    db.query(sql, [username, email, address, contact, image, userId], (err) => {
+    const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, profile_pic=? WHERE id=?`;
+    db.query(sql, [username, email, address, contact, profile_pic, userId], (err) => {
         if (err) return res.send("Error updating profile: " + err.message);
         
+        // Update session so Navbar changes instantly
         req.session.user.username = username;
-        req.session.user.image = image;
+        req.session.user.profile_pic = profile_pic;
         res.redirect('/dashboard');
     });
 });
@@ -304,8 +309,7 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    // FIXED: Swapped profile_pic for image
-    db.query('SELECT id, username, email, role, image FROM users', (err, allUsers) => {
+    db.query('SELECT id, username, email, role, profile_pic FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users: " + err.message); 
 
         const taskSql = `
@@ -324,7 +328,12 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
                 const userTasks = allTasks.filter(t => t.user_id === u.id);
                 const userTotal = userTasks.length;
                 const userCompleted = userTasks.filter(t => t.status === 'Completed').length;
-                userProgress[u.id] = userTotal === 0 ? 0 : Math.round((userCompleted / userTotal) * 100);
+                
+                // Directly append progress to the user object so admin.ejs can read u.progress
+                u.progress = userTotal === 0 ? 0 : Math.round((userCompleted / userTotal) * 100);
+                
+                // Keeping userProgress map for backwards compatibility 
+                userProgress[u.id] = u.progress;
             });
 
             const totalUsers = allUsers.length;
