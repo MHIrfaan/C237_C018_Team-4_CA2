@@ -189,14 +189,35 @@ app.get('/profile/edit', checkAuth, (req, res) => {
 // Multer handles the image upload, SQL only handles the text details!
 app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
-    const { username, email, contact, address } = req.body;
+    const { username, email, contact, address, currentImage } = req.body;
 
-    const sql = `UPDATE users SET username=?, email=?, address=?, contact=? WHERE id=?`;
-    db.query(sql, [username, email, address, contact, userId], (err) => {
-        if (err) return res.send("Error updating profile.");
-        req.session.user.username = username;
-        res.redirect('/dashboard');
-    });
+    let profilePic = currentImage || 'profile_icon.webp';
+
+    if (req.file) {
+        profilePic = req.file.filename;
+    }
+
+    const sql = `
+        UPDATE users
+        SET username=?, email=?, address=?, contact=?, profile_pic=?
+        WHERE id=?
+    `;
+
+    db.query(
+        sql,
+        [username, email, address, contact, profilePic, userId],
+        (err) => {
+            if (err) {
+                console.error("Error updating profile:", err);
+                return res.send("Error updating profile.");
+            }
+
+            req.session.user.username = username;
+            req.session.user.profile_pic = profilePic;
+
+            res.redirect('/dashboard');
+        }
+    );
 });
 
 // --- STUDENT DASHBOARD (READ) ---
@@ -358,21 +379,50 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     });
 });
 
-app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
+app.post('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     const userIdToDelete = req.params.id;
-    if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
 
-    db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
-        if (err) return res.send("Error deleting user.");
-        res.redirect('/admin');
-    });
+    if (String(userIdToDelete) === String(req.session.user.id)) {
+        return res.send("You cannot delete your own admin account.");
+    }
+
+    db.query(
+        'DELETE FROM users WHERE id = ?',
+        [userIdToDelete],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting user:", err);
+                return res.send("Error deleting user.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("User not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
 });
 
-app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
-    db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
-        if (err) return res.send("Error deleting task.");
-        res.redirect('/admin');
-    });
+app.post('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
+    const taskId = req.params.id;
+
+    db.query(
+        'DELETE FROM tasks WHERE id = ?',
+        [taskId],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting task:", err);
+                return res.send("Error deleting task.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("Task not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
 });
 
 // ======================
