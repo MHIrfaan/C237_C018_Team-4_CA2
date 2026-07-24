@@ -73,7 +73,7 @@
                         <th>User</th>
                         <th>Email</th>
                         <th>Role</th>
-                        <th>Overall Progress</th>
+                        <th style="width: 280px;">Overall Progress</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -82,8 +82,8 @@
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center gap-3">
-                                    <!-- FIXED: Avatar Trick implemented properly to load ID images -->
-                                    <img src="/images/profile_<%= u.id %>.jpg" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #e2e8f0;" alt="Avatar">
+                                    <!-- Displays user's specific database profile pic! -->
+                                    <img src="/images/<%= u.profile_pic || 'profile_icon_2.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon_2.webp';" class="rounded-circle shadow-sm" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #fff;" alt="Avatar">
                                     <div>
                                         <div class="fw-bold"><%= u.username %></div>
                                         <div class="text-muted small">#<%= u.id %></div>
@@ -98,17 +98,22 @@
                                     <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Student</span>
                                 <% } %>
                             </td>
-                            <td style="width: 25%;">
-                                <% const progressVal = u.progress || 0; %>
-                                <% const barColor = progressVal === 100 ? 'bg-success' : (progressVal < 50 ? 'bg-danger' : 'bg-warning'); %>
-                                <% const progressStyle = 'style="width: ' + progressVal + '%;"'; %>
-                                
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="progress w-100" style="height: 8px;">
-                                        <div class="progress-bar <%= barColor %>" role="progressbar" <%- progressStyle %> aria-valuenow="<%= progressVal %>" aria-valuemin="0" aria-valuemax="100"></div>
+                            <td>
+                                <% if(u.role !== 'admin') { %>
+                                    <% const progressVal = userProgress[u.id] || 0; %>
+                                    <% const barColor = progressVal === 100 ? 'bg-success' : (progressVal < 50 ? 'bg-danger' : 'bg-warning'); %>
+                                    <% const progressStyle = 'style="width: ' + progressVal + '%;"'; %>
+                                    
+                                    <div class="d-flex align-items-center gap-3">
+                                        <!-- Animated and styled progress bar -->
+                                        <div class="progress w-100 shadow-sm" style="height: 10px; border-radius: 10px;">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated <%= barColor %>" role="progressbar" <%- progressStyle %> aria-valuenow="<%= progressVal %>" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                        <span class="small fw-bold text-dark"><%= progressVal %>%</span>
                                     </div>
-                                    <span class="small fw-semibold text-muted"><%= progressVal %>%</span>
-                                </div>
+                                <% } else { %>
+                                    <span class="text-muted small">-</span>
+                                <% } %>
                             </td>
                             <td class="text-end">
                                 <% if(u.id !== user.id) { %>
