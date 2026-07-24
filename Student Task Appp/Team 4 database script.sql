@@ -15,7 +15,6 @@ CREATE TABLE users (
     address VARCHAR(255),
     contact VARCHAR(20),
     role ENUM('student','admin') DEFAULT 'student',
-    profile_pic VARCHAR(255) DEFAULT 'profile_icon.webp',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -30,10 +29,8 @@ CREATE TABLE tasks (
     module VARCHAR(100) NOT NULL,
     task_type ENUM('Assignment','Quiz','Exam','Project','Study Session') DEFAULT 'Assignment',
     priority ENUM('High','Medium','Low') DEFAULT 'Medium',
-    
-    -- FIXED: Added 'In Progress' to match the Node.js application
-    status ENUM('Pending','In Progress','Completed') DEFAULT 'Pending',
-    
+    deadline DATETIME NOT NULL,
+    status ENUM('Pending','Completed') DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
