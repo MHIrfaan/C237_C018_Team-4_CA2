@@ -2,7 +2,21 @@ const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
 const path = require('path');
+const multer = require('multer'); // Added for file uploads
 const app = express();
+
+// ======================
+// FILE UPLOAD SETUP (MULTER)
+// ======================
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public/images'); // Make sure to create a public/images folder
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+const upload = multer({ storage: storage });
 
 // ======================
 // DATABASE CONNECTION
@@ -30,7 +44,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+app.use(express.static('public')); // Ensure 'public' folder exists for images
 
 app.use(session({
     secret: 'studytrack_secret_key',
@@ -75,7 +89,6 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    // Extract the new adminCode from the form
     const { username, email, password, confirmPassword, address, contact, adminCode } = req.body;
 
     const renderError = (msg) => {
@@ -85,21 +98,14 @@ app.post('/register', (req, res) => {
         });
     };
 
-    // ==========================================
-    // STRICT ADMIN CODE VALIDATION
-    // ==========================================
-    let assignedRole = 'student'; // Default to student
-    
-    // Check if the user typed ANYTHING into the admin code box
+    let assignedRole = 'student'; 
     if (adminCode && adminCode.trim() !== '') {
         if (adminCode === 'C237ADMIN') {
-            assignedRole = 'admin'; // Correct code -> make them an admin
+            assignedRole = 'admin'; 
         } else {
-            // Incorrect code -> throw an error!
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
         }
     }
-    // ==========================================
 
     if (!username || !email || !password || !confirmPassword || !address || !contact) {
         return renderError("Please fill in all required fields.");
@@ -118,11 +124,11 @@ app.post('/register', (req, res) => {
             return renderError("Username or Email already exists.");
         }
 
+        // Added profile_pic default assignment 
         const insertSql = `
-        INSERT INTO users (username,email,password,address,contact,role)
-        VALUES (?, ?, SHA1(?), ?, ?, ?)`;
+        INSERT INTO users (username,email,password,address,contact,role,profile_pic)
+        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
 
-        // Save the assignedRole (either 'student' or 'admin') to the database
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed");
             res.render('register', {
@@ -153,7 +159,13 @@ app.post('/login', (req, res) => {
         }
 
         const user = results[0];
-        req.session.user = { id: user.id, username: user.username, role: user.role };
+        // Added profile_pic to session
+        req.session.user = { 
+            id: user.id, 
+            username: user.username, 
+            role: user.role,
+            profile_pic: user.profile_pic || 'profile_icon.webp' 
+        };
 
         if (user.role === "admin") return res.redirect('/admin');
         res.redirect('/dashboard');
@@ -162,6 +174,36 @@ app.post('/login', (req, res) => {
 
 app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/login'));
+});
+
+// --- PROFILE ROUTES (NEW) ---
+app.get('/profile', checkAuth, (req, res) => {
+    const userId = req.session.user.id;
+    db.query('SELECT * FROM users WHERE id = ?', [userId], (err, results) => {
+        if (err || results.length === 0) return res.send("User not found.");
+        res.render('profile', { user: results[0] });
+    });
+});
+
+app.post('/profile', checkAuth, upload.single('image'), (req, res) => {
+    const userId = req.session.user.id;
+    const { username, email, address, contact, currentImage } = req.body;
+    
+    let image = currentImage || 'profile_icon.webp'; 
+    if (req.file) {
+        image = req.file.filename; 
+    }
+
+    const sql = 'UPDATE users SET username=?, email=?, address=?, contact=?, profile_pic=? WHERE id=?';
+    db.query(sql, [username, email, address, contact, image, userId], (err) => {
+        if (err) return res.send("Error updating profile");
+        
+        // Update session data
+        req.session.user.username = username;
+        req.session.user.profile_pic = image;
+        
+        res.redirect('/dashboard');
+    });
 });
 
 // --- STUDENT DASHBOARD (READ) ---
@@ -196,152 +238,55 @@ app.get('/task/add', checkAuth, (req, res) => {
 app.post('/task/add', checkAuth, (req, res) => {
     const userId = req.session.user.id;
 
-    let {
-        title,
-        description,
-        module,
-        task_type,
-        priority,
-        deadline
-    } = req.body;
+    let { title, description, module, task_type, priority, deadline } = req.body;
 
     title = title ? title.trim() : '';
     description = description ? description.trim() : '';
     module = module ? module.trim().toUpperCase() : '';
 
-    const formData = {
-        title,
-        description,
-        module,
-        task_type,
-        priority,
-        deadline
-    };
+    const formData = { title, description, module, task_type, priority, deadline };
 
-    const validTaskTypes = [
-        'Assignment',
-        'Quiz',
-        'Exam',
-        'Project',
-        'Study Session'
-    ];
+    const validTaskTypes = ['Assignment', 'Quiz', 'Exam', 'Project', 'Study Session'];
+    const validPriorities = ['High', 'Medium', 'Low'];
 
-    const validPriorities = [
-        'High',
-        'Medium',
-        'Low'
-    ];
-
-    // Required field validation
-    if (
-        !title ||
-        !module ||
-        !task_type ||
-        !priority ||
-        !deadline
-    ) {
-        return res.render('addTask', {
-            error: 'Please complete all required fields.',
-            formData
-        });
+    if (!title || !module || !task_type || !priority || !deadline) {
+        return res.render('addTask', { error: 'Please complete all required fields.', formData });
     }
-
-    // Title validation
     if (title.length > 150) {
-        return res.render('addTask', {
-            error: 'Task title cannot exceed 150 characters.',
-            formData
-        });
+        return res.render('addTask', { error: 'Task title cannot exceed 150 characters.', formData });
     }
-
-    // Description validation
     if (description.length > 1000) {
-        return res.render('addTask', {
-            error: 'Description cannot exceed 1000 characters.',
-            formData
-        });
+        return res.render('addTask', { error: 'Description cannot exceed 1000 characters.', formData });
     }
-
-    // Module validation
     if (module.length > 100) {
-        return res.render('addTask', {
-            error: 'Module cannot exceed 100 characters.',
-            formData
-        });
+        return res.render('addTask', { error: 'Module cannot exceed 100 characters.', formData });
     }
-
-    // Task type validation
     if (!validTaskTypes.includes(task_type)) {
-        return res.render('addTask', {
-            error: 'Please select a valid task type.',
-            formData
-        });
+        return res.render('addTask', { error: 'Please select a valid task type.', formData });
     }
-
-    // Priority validation
     if (!validPriorities.includes(priority)) {
-        return res.render('addTask', {
-            error: 'Please select a valid priority.',
-            formData
-        });
+        return res.render('addTask', { error: 'Please select a valid priority.', formData });
     }
 
-    // Deadline validation
     const selectedDeadline = new Date(`${deadline}T00:00:00`);
     const today = new Date();
-
     today.setHours(0, 0, 0, 0);
 
     if (Number.isNaN(selectedDeadline.getTime())) {
-        return res.render('addTask', {
-            error: 'Please enter a valid deadline.',
-            formData
-        });
+        return res.render('addTask', { error: 'Please enter a valid deadline.', formData });
     }
-
     if (selectedDeadline < today) {
-        return res.render('addTask', {
-            error: 'The deadline cannot be before today.',
-            formData
-        });
+        return res.render('addTask', { error: 'The deadline cannot be before today.', formData });
     }
 
-    const sql = `
-        INSERT INTO tasks
-        (
-            user_id,
-            title,
-            description,
-            module,
-            task_type,
-            priority,
-            deadline,
-            status
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-        userId,
-        title,
-        description || null,
-        module,
-        task_type,
-        priority,
-        deadline,
-        'Pending'
-    ];
+    const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    const values = [userId, title, description || null, module, task_type, priority, deadline, 'Pending'];
 
     db.query(sql, values, (err, results) => {
         if (err) {
             console.error('Error adding task:', err);
-
-            return res.render('addTask', {
-                error: 'Unable to add the task. Please try again.',
-                formData
-            });
+            return res.render('addTask', { error: 'Unable to add the task. Please try again.', formData });
         }
-
         res.redirect('/dashboard');
     });
 });
@@ -410,7 +355,7 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
+    db.query('SELECT id, username, email, role, profile_pic FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users.");
 
         const taskSql = `
@@ -428,11 +373,23 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
             const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
             const completionRate = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
+            // Calculate progress for each student
+            const userProgress = {};
+            allUsers.forEach(u => {
+                if (u.role === 'student') {
+                    const userTasks = allTasks.filter(t => t.username === u.username);
+                    const t_total = userTasks.length;
+                    const t_completed = userTasks.filter(t => t.status === 'Completed').length;
+                    userProgress[u.id] = t_total === 0 ? 0 : Math.round((t_completed / t_total) * 100);
+                }
+            });
+
             res.render('admin', { 
                 user: req.session.user, 
                 users: allUsers,
                 tasks: allTasks,
-                stats: { totalUsers, totalTasks, completionRate }
+                stats: { totalUsers, totalTasks, completionRate },
+                userProgress: userProgress // Added progress mapping
             });
         });
     });
