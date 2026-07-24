@@ -212,6 +212,14 @@
         .task-search-group .input-group-text {
             background: #fff;
         }
+
+        .task-completed td {
+            opacity: 0.55;
+        }
+        .task-completed .fw-bold {
+            text-decoration: line-through;
+            text-decoration-color: #64748b;
+        }
     </style>
 </head>
 
@@ -399,6 +407,8 @@
                                         </tr>
                                         <% } else { %>
                                             <% tasks.forEach(task=> { %>
+                                                <% tasks.forEach(task => { %>
+                                                <tr class="<%= task.status === 'Completed' ? 'task-completed' : '' %>">
                                                 <tr data-module="<%= task.module %>" data-status="<%= task.status %>"
                                                     data-deadline="<%= task.deadline %>">
                                                     <td class="fw-semibold text-dark">
