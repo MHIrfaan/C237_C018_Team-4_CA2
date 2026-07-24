@@ -23,15 +23,15 @@
         </div>
         
         <div class="card-body p-4">
-            <!-- Ensure enctype is set to multipart/form-data for image uploads to work -->
             <form action="/profile/edit" method="POST" enctype="multipart/form-data">
                 
                 <div class="text-center mb-4">
-                    <!-- Attempts to load the user's saved image via ID, falls back to the default icon if missing -->
-                    <img src="/images/profile_<%= userProfile.id %>.jpg" onerror="this.onerror=null; this.src='/images/profile_icon.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
+                    <img src="/images/<%= userProfile.profile_pic || 'profile_icon_2.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon_2.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
                     <div>
                         <label class="form-label fw-semibold text-dark small">Upload New Avatar</label>
-                        <!-- Standard file input for uploading images -->
+                        <!-- Retains the current image filename if no new file is uploaded -->
+                        <input type="hidden" name="currentImage" value="<%= userProfile.profile_pic || 'profile_icon_2.webp' %>">
+                        <!-- Standard file input -->
                         <input type="file" class="form-control form-control-sm mx-auto" style="max-width: 250px;" name="image" accept="image/*">
                     </div>
                 </div>
