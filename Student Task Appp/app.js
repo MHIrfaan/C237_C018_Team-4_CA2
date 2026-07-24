@@ -358,21 +358,50 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     });
 });
 
-app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
+app.post('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     const userIdToDelete = req.params.id;
-    if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
 
-    db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
-        if (err) return res.send("Error deleting user.");
-        res.redirect('/admin');
-    });
+    if (String(userIdToDelete) === String(req.session.user.id)) {
+        return res.send("You cannot delete your own admin account.");
+    }
+
+    db.query(
+        'DELETE FROM users WHERE id = ?',
+        [userIdToDelete],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting user:", err);
+                return res.send("Error deleting user.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("User not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
 });
 
-app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
-    db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
-        if (err) return res.send("Error deleting task.");
-        res.redirect('/admin');
-    });
+app.post('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
+    const taskId = req.params.id;
+
+    db.query(
+        'DELETE FROM tasks WHERE id = ?',
+        [taskId],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting task:", err);
+                return res.send("Error deleting task.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("Task not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
 });
 
 // ======================
