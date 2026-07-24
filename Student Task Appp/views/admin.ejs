@@ -90,9 +90,10 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Username</th>
+                        <th>User</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th style="width: 200px;">Progress</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -100,13 +101,28 @@
                     <% users.forEach(u => { %>
                         <tr>
                             <td class="text-muted">#<%= u.id %></td>
-                            <td class="fw-bold"><%= u.username %></td>
+                            <td>
+                                <img src="/images/<%= u.profile_pic || 'profile_icon.webp' %>" alt="" class="rounded-circle me-2" width="28" height="28" style="object-fit: cover;">
+                                <span class="fw-bold"><%= u.username %></span>
+                            </td>
                             <td class="text-muted"><%= u.email %></td>
                             <td>
                                 <% if(u.role === 'admin') { %>
                                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Admin</span>
                                 <% } else { %>
                                     <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Student</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if(u.role !== 'admin') { %>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress w-100" style="height: 8px;">
+                                           <span class="small text-muted fw-bold"><%= userProgress[u.id] || 0 %>%</span>
+                                        </div>
+                                        <span class="small text-muted fw-bold"><%= userProgress[u.id] || 0 %>%</span>
+                                    </div>
+                                <% } else { %>
+                                    <span class="text-muted small">-</span>
                                 <% } %>
                             </td>
                             <td class="text-end">
