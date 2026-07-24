@@ -100,7 +100,7 @@ app.post('/register', (req, res) => {
     let assignedRole = 'student'; 
     
     if (adminCode && adminCode.trim() !== '') {
-        if (adminCode === 'admin') { // Admin password changed to 'admin'
+        if (adminCode === 'admin') { 
             assignedRole = 'admin'; 
         } else {
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
@@ -124,10 +124,10 @@ app.post('/register', (req, res) => {
             return renderError("Username or Email already exists.");
         }
 
-        // FIXED: Using "image" column to match your database schema
+        // FIXED: Swapped profile_pic for image, and set default to profile_icon_3.webp
         const insertSql = `
         INSERT INTO users (username,email,password,address,contact,role,image)
-        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
+        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon_3.webp')`;
 
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed: " + err.message);
@@ -164,7 +164,7 @@ app.post('/login', (req, res) => {
             id: user.id, 
             username: user.username, 
             role: user.role,
-            image: user.image || 'profile_icon.webp' 
+            image: user.image || 'profile_icon_3.webp' 
         };
 
         if (user.role === "admin") return res.redirect('/admin');
@@ -189,12 +189,12 @@ app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
     const { username, email, contact, address, currentImage } = req.body;
 
-    let image = currentImage || 'profile_icon.webp'; 
+    let image = currentImage || 'profile_icon_3.webp'; 
     if (req.file) {
         image = req.file.filename; 
     }
 
-    // FIXED: Updating "image" column
+    // FIXED: Swapped profile_pic for image
     const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, image=? WHERE id=?`;
     db.query(sql, [username, email, address, contact, image, userId], (err) => {
         if (err) return res.send("Error updating profile: " + err.message);
@@ -304,7 +304,7 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    // FIXED: Requesting "image" column from users
+    // FIXED: Swapped profile_pic for image
     db.query('SELECT id, username, email, role, image FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users: " + err.message); 
 
