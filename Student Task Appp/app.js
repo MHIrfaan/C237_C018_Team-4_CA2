@@ -373,7 +373,7 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     });
 });
 
-// --- MARK TASK AS COMPLETED / UNCOMPLETED (UPDATE) ---
+// --- MARK TASK AS COMPLETED / UNCOMPLETED (UPDATE) --- TESTING
 app.post('/task/complete/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
