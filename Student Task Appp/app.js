@@ -2,27 +2,28 @@ const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
 const path = require('path');
-const multer = require('multer'); 
+const multer = require('multer');
 
 const app = express();
 
 // ======================
-// FILE UPLOAD SETUP (MULTER)
+// THE NO-SQL IMAGE HACK
 // ======================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'public/images'); 
     },
     filename: (req, file, cb) => {
-        // Appends a timestamp to the original filename to ensure uniqueness
-        cb(null, Date.now() + '-' + file.originalname);
+        // We force the filename to be the user's ID so the database doesn't need to remember it!
+        cb(null, 'profile_' + req.session.user.id + '.jpg'); 
     }
 });
 const upload = multer({ storage: storage });
 
 // ======================
-// DATABASE CONNECTION (POOL)
+// DATABASE CONNECTION (Upgraded to Pool)
 // ======================
+// A Pool automatically handles reconnecting if Azure drops the connection!
 const db = mysql.createPool({
     host: 'c237-sweekwang-mysql.mysql.database.azure.com',
     user: 'c237_018',
@@ -83,7 +84,7 @@ app.get('/', (req, res) => {
 app.get('/register', (req, res) => {
     res.render('register', {
         error: null, success: null,
-        username: '', email: '', address: '', contact: ''
+        username: '', email: '', address: '', contact: '', image: ''
     });
 });
 
@@ -101,7 +102,7 @@ app.post('/register', (req, res) => {
     
     // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
-        if (adminCode === 'admin') { 
+        if (adminCode === 'admin') {
             assignedRole = 'admin'; 
         } else {
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
@@ -120,18 +121,17 @@ app.post('/register', (req, res) => {
 
     const checkSql = "SELECT * FROM users WHERE username=? OR email=?";
     db.query(checkSql, [username, email], (err, results) => {
-        if (err) return res.send("Database Error: " + err.message);
+        if (err) return res.send("Database Error");
         if (results.length > 0) {
             return renderError("Username or Email already exists.");
         }
 
-        // Inserting the default profile picture into the database
         const insertSql = `
-        INSERT INTO users (username,email,password,address,contact,role,profile_pic)
-        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
+        INSERT INTO users (username,email,password,address,contact,role)
+        VALUES (?, ?, SHA1(?), ?, ?, ?)`;
 
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
-            if (err) return res.send("Registration Failed: " + err.message);
+            if (err) return res.send("Registration Failed");
             res.render('register', {
                 error: null, 
                 success: "Registration successful! You will now be redirected to login.",
@@ -154,18 +154,18 @@ app.post('/login', (req, res) => {
 
     const sql = `SELECT * FROM users WHERE username=? AND password=SHA1(?)`;
     db.query(sql, [username, password], (err, results) => {
-        if (err) return res.send("Database Error: " + err.message);
+        if (err) return res.send("Database Error");
         if (results.length == 0) {
             return res.render('login', { error: "Invalid username or password." });
         }
 
         const user = results[0];
-        
         req.session.user = { 
             id: user.id, 
             username: user.username, 
             role: user.role,
-            profile_pic: user.profile_pic || 'profile_icon.webp' 
+            // Fallback since DB doesn't have an image column
+            image: 'profile icon_5.webp' 
         };
 
         if (user.role === "admin") return res.redirect('/admin');
@@ -182,30 +182,19 @@ app.get('/profile/edit', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     db.query('SELECT * FROM users WHERE id = ?', [userId], (err, results) => {
         if (err || results.length === 0) return res.send("User not found.");
-        
-        let userProfile = results[0];
-        // Map database profile_pic to image so editProfile.ejs populates the value correctly
-        userProfile.image = userProfile.profile_pic; 
-        
-        res.render('editProfile', { userProfile: userProfile, user: req.session.user });
+        res.render('editProfile', { userProfile: results[0], user: req.session.user });
     });
 });
 
-// Handling profile edits (Text only via EJS form, multer upload.single removed)
-app.post('/profile/edit', checkAuth, (req, res) => {
+// Multer handles the image upload, SQL only handles the text details!
+app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
-    const { username, email, contact, address, image } = req.body;
+    const { username, email, contact, address } = req.body;
 
-    // Use submitted text input or fallback to default
-    let profile_pic = image || 'profile_icon.webp'; 
-
-    const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, profile_pic=? WHERE id=?`;
-    db.query(sql, [username, email, address, contact, profile_pic, userId], (err) => {
-        if (err) return res.send("Error updating profile: " + err.message);
-        
-        // Update session so Navbar changes instantly
+    const sql = `UPDATE users SET username=?, email=?, address=?, contact=? WHERE id=?`;
+    db.query(sql, [username, email, address, contact, userId], (err) => {
+        if (err) return res.send("Error updating profile.");
         req.session.user.username = username;
-        req.session.user.profile_pic = profile_pic;
         res.redirect('/dashboard');
     });
 });
@@ -213,20 +202,33 @@ app.post('/profile/edit', checkAuth, (req, res) => {
 // --- STUDENT DASHBOARD (READ) ---
 app.get('/dashboard', checkAuth, (req, res) => {
     const userId = req.session.user.id;
-    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY due_date ASC`;
+    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY deadline ASC`;
     
     db.query(sql, [userId], (err, tasks) => {
-        if (err) return res.send("Error fetching tasks: " + err.message);
+        if (err) return res.send("Error fetching tasks.");
         res.render('dashboard', { user: req.session.user, tasks: tasks });
     });
 });
 
-// --- ADD TASK (CREATE) ---
+// Display add-task page
 app.get('/task/add', checkAuth, (req, res) => {
     const defaultDeadline = req.query.deadline || '';
-    res.render('addTask', { error: null, formData: { deadline: defaultDeadline }, user: req.session.user });
+
+    res.render('addTask', {
+        error: null,
+        formData: {
+            title: '',
+            description: '',
+            module: '',
+            task_type: '',
+            priority: '',
+            deadline: defaultDeadline
+        },
+        user: req.session.user
+    });
 });
 
+// Add task to database 
 app.post('/task/add', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     let { title, description, module, task_type, priority, deadline } = req.body;
@@ -237,13 +239,24 @@ app.post('/task/add', checkAuth, (req, res) => {
 
     const formData = { title, description, module, task_type, priority, deadline };
 
+    // Required field validation
     if (!title || !module || !task_type || !priority || !deadline) {
         return res.render('addTask', { error: 'Please complete all required fields.', formData, user: req.session.user });
     }
 
-    const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.query(sql, [userId, title, description || null, module, task_type, priority, deadline, 'Pending'], (err, results) => {
-        if (err) return res.render('addTask', { error: 'Unable to add task: ' + err.message, formData, user: req.session.user });
+    const sql = `
+        INSERT INTO tasks
+        (user_id, title, description, module, task_type, priority, deadline, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [userId, title, description || null, module, task_type, priority, deadline, 'Pending'];
+
+    db.query(sql, values, (err, results) => {
+        if (err) {
+            console.error('Error adding task:', err);
+            return res.render('addTask', { error: 'Unable to add the task. Please try again.', formData, user: req.session.user });
+        }
         res.redirect('/dashboard');
     });
 });
@@ -252,10 +265,10 @@ app.post('/task/add', checkAuth, (req, res) => {
 app.get('/task/edit/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
-    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
+    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Database error: " + err.message);
+        if (err) return res.send("Database error.");
         if (results.length === 0) return res.send("Task not found.");
         res.render('editTask', { task: results[0] });
     });
@@ -266,9 +279,9 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     const { title, description, module, task_type, priority, deadline, status } = req.body;
 
-    const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, due_date=?, status=? WHERE id=? AND user_id=?`;
+    const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, deadline=?, status=? WHERE id=? AND user_id=?`;
     db.query(sql, [title, description, module, task_type, priority, deadline, status, taskId, userId], (err, results) => {
-        if (err) return res.send("Error updating task: " + err.message);
+        if (err) return res.send("Error updating task.");
         res.redirect('/dashboard');
     });
 });
@@ -280,13 +293,13 @@ app.post('/task/complete/:id', checkAuth, (req, res) => {
 
     const checkSql = `SELECT status FROM tasks WHERE id = ? AND user_id = ?`;
     db.query(checkSql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Error checking task: " + err.message);
+        if (err) return res.send("Error checking task.");
         if (results.length === 0) return res.send("Task not found.");
 
         const newStatus = results[0].status === 'Completed' ? 'Pending' : 'Completed';
         const updateSql = `UPDATE tasks SET status = ? WHERE id = ? AND user_id = ?`;
         db.query(updateSql, [newStatus, taskId, userId], (err) => {
-            if (err) return res.send("Error updating task status: " + err.message);
+            if (err) return res.send("Error updating task status.");
             res.redirect('/dashboard');
         });
     });
@@ -299,7 +312,8 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
     const sql = `DELETE FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Error deleting task: " + err.message);
+        if (err) return res.send("Error deleting task.");
+        if (results.affectedRows === 0) return res.send("Task not found or not yours.");
         res.redirect('/dashboard');
     });
 });
@@ -309,31 +323,24 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role, profile_pic FROM users', (err, allUsers) => {
-        if (err) return res.send("Error loading users: " + err.message); 
+    db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
+        if (err) return res.send("Error loading users: " + err.message);
 
         const taskSql = `
-            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.due_date, '%Y-%m-%d') as deadline, users.username 
+            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
-            ORDER BY tasks.due_date ASC
+            ORDER BY tasks.deadline ASC
         `;
         
         db.query(taskSql, (err, allTasks) => {
             if (err) return res.send("Error loading tasks: " + err.message);
 
-            const userProgress = {};
-
             allUsers.forEach(u => {
                 const userTasks = allTasks.filter(t => t.user_id === u.id);
                 const userTotal = userTasks.length;
                 const userCompleted = userTasks.filter(t => t.status === 'Completed').length;
-                
-                // Directly append progress to the user object so admin.ejs can read u.progress
                 u.progress = userTotal === 0 ? 0 : Math.round((userCompleted / userTotal) * 100);
-                
-                // Keeping userProgress map for backwards compatibility 
-                userProgress[u.id] = u.progress;
             });
 
             const totalUsers = allUsers.length;
@@ -345,8 +352,7 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
                 user: req.session.user, 
                 users: allUsers,
                 tasks: allTasks,
-                stats: { totalUsers, totalTasks, completionRate },
-                userProgress: userProgress
+                stats: { totalUsers, totalTasks, completionRate }
             });
         });
     });
@@ -357,14 +363,14 @@ app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
 
     db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
-        if (err) return res.send("Error deleting user: " + err.message);
+        if (err) return res.send("Error deleting user.");
         res.redirect('/admin');
     });
 });
 
 app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
     db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
-        if (err) return res.send("Error deleting task: " + err.message);
+        if (err) return res.send("Error deleting task.");
         res.redirect('/admin');
     });
 });
