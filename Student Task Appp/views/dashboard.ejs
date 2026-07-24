@@ -212,11 +212,6 @@
         .task-search-group .input-group-text {
             background: #fff;
         }
-
-        .task-completed td {
-            opacity: 0.55;
-        }
-
     </style>
 </head>
 
@@ -241,10 +236,14 @@
                 </svg>
                 StudyTrack
             </a>
+            
             <div class="d-flex align-items-center">
-                <img src="/images/<%= user.profile_pic || 'profile_icon.webp' %>" alt="Profile" class="rounded-circle me-2 border border-2 border-white" width="35" height="35" style="object-fit: cover;">
+                <!-- User Avatar added next to Welcome message -->
+                <img src="/images/profile_<%= user.id %>.jpg" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" alt="Avatar" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);">
                 <span class="text-white me-3 opacity-75">Welcome back, <strong><%= user.username %></strong>!</span>
-                <a href="/profile" class="btn btn-sm btn-outline-light me-2">Profile</a>
+                
+                <!-- Added Edit Profile Button -->
+                <a href="/profile/edit" class="btn btn-sm btn-outline-light me-2 fw-bold px-3">Edit Profile</a>
                 <a href="/logout" class="btn btn-sm btn-light text-primary fw-bold px-3">Logout</a>
             </div>
         </div>
@@ -403,10 +402,11 @@
                                             </td>
                                         </tr>
                                         <% } else { %>
-                                            <% tasks.forEach(task => { %>
-                                            <tr class="<%= task.status === 'Completed' ? 'task-completed' : '' %>" data-module="<%= task.module %>" data-status="<%= task.status %>" data-deadline="<%= task.deadline %>">
-                                            <td class="fw-semibold text-dark">
-                                                <%= task.title %>
+                                            <% tasks.forEach(task=> { %>
+                                                <tr data-module="<%= task.module %>" data-status="<%= task.status %>"
+                                                    data-deadline="<%= task.deadline %>">
+                                                    <td class="fw-semibold text-dark">
+                                                        <%= task.title %>
                                                     </td>
                                                     <td><span
                                                             class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">
