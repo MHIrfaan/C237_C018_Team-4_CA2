@@ -242,9 +242,9 @@
                 StudyTrack
             </a>
             <div class="d-flex align-items-center">
-                <span class="text-white me-3 opacity-75">Welcome back, <strong>
-                        <%= user.username %>
-                    </strong>!</span>
+                <img src="/images/<%= user.profile_pic || 'profile_icon.webp' %>" alt="Profile" class="rounded-circle me-2 border border-2 border-white" width="35" height="35" style="object-fit: cover;">
+                <span class="text-white me-3 opacity-75">Welcome back, <strong><%= user.username %></strong>!</span>
+                <a href="/profile" class="btn btn-sm btn-outline-light me-2">Profile</a>
                 <a href="/logout" class="btn btn-sm btn-light text-primary fw-bold px-3">Logout</a>
             </div>
         </div>
