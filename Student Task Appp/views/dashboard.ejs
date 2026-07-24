@@ -239,7 +239,7 @@
             
             <div class="d-flex align-items-center">
                 <!-- User Avatar added next to Welcome message -->
-                <img src="/images/<%= user.profile_pic || 'profile_icon_2.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon_2.webp';" alt="Avatar" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);">
+                <img src="/images/profile_<%= user.id %>.jpg" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" alt="Avatar" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);">
                 <span class="text-white me-3 opacity-75">Welcome back, <strong><%= user.username %></strong>!</span>
                 
                 <!-- Added Edit Profile Button -->

@@ -23,16 +23,13 @@
         </div>
         
         <div class="card-body p-4">
-            <form action="/profile/edit" method="POST" enctype="multipart/form-data">
+            <form action="/profile/edit" method="POST">
                 
                 <div class="text-center mb-4">
-                    <img src="/images/<%= userProfile.profile_pic || 'profile_icon_2.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon_2.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
+                    <img src="/images/<%= userProfile.image || 'profile icon_5.webp' %>" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
                     <div>
-                        <label class="form-label fw-semibold text-dark small">Upload New Avatar</label>
-                        <!-- Retains the current image filename if no new file is uploaded -->
-                        <input type="hidden" name="currentImage" value="<%= userProfile.profile_pic || 'profile_icon_2.webp' %>">
-                        <!-- Standard file input -->
-                        <input type="file" class="form-control form-control-sm mx-auto" style="max-width: 250px;" name="image" accept="image/*">
+                        <label class="form-label fw-semibold text-dark small">Update Image Filename</label>
+                        <input type="text" class="form-control form-control-sm text-center mx-auto" style="max-width: 250px;" name="image" value="<%= userProfile.image %>">
                     </div>
                 </div>
 
