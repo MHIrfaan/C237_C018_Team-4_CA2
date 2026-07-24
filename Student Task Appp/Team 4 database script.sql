@@ -30,8 +30,10 @@ CREATE TABLE tasks (
     module VARCHAR(100) NOT NULL,
     task_type ENUM('Assignment','Quiz','Exam','Project','Study Session') DEFAULT 'Assignment',
     priority ENUM('High','Medium','Low') DEFAULT 'Medium',
-    deadline DATETIME NOT NULL,
-    status ENUM('Pending','Completed') DEFAULT 'Pending',
+    
+    -- FIXED: Added 'In Progress' to match the Node.js application
+    status ENUM('Pending','In Progress','Completed') DEFAULT 'Pending',
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
