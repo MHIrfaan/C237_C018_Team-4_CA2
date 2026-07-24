@@ -15,6 +15,7 @@ CREATE TABLE users (
     address VARCHAR(255),
     contact VARCHAR(20),
     role ENUM('student','admin') DEFAULT 'student',
+    profile_pic VARCHAR(255) DEFAULT 'profile_icon.webp',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
