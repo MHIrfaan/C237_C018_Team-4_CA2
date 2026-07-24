@@ -23,13 +23,16 @@
         </div>
         
         <div class="card-body p-4">
-            <form action="/profile/edit" method="POST">
+            <!-- Ensure enctype is set to multipart/form-data for image uploads to work -->
+            <form action="/profile/edit" method="POST" enctype="multipart/form-data">
                 
                 <div class="text-center mb-4">
-                    <img src="/images/<%= userProfile.image || 'profile icon_5.webp' %>" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
+                    <!-- Attempts to load the user's saved image via ID, falls back to the default icon if missing -->
+                    <img src="/images/profile_<%= userProfile.id %>.jpg" onerror="this.onerror=null; this.src='/images/profile_icon.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
                     <div>
-                        <label class="form-label fw-semibold text-dark small">Update Image Filename</label>
-                        <input type="text" class="form-control form-control-sm text-center mx-auto" style="max-width: 250px;" name="image" value="<%= userProfile.image %>">
+                        <label class="form-label fw-semibold text-dark small">Upload New Avatar</label>
+                        <!-- Standard file input for uploading images -->
+                        <input type="file" class="form-control form-control-sm mx-auto" style="max-width: 250px;" name="image" accept="image/*">
                     </div>
                 </div>
 
