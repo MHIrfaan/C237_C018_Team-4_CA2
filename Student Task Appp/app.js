@@ -14,7 +14,6 @@ const storage = multer.diskStorage({
         cb(null, 'public/images'); 
     },
     filename: (req, file, cb) => {
-        // We force the filename to be the user's ID so the database doesn't need to remember it!
         cb(null, 'profile_' + req.session.user.id + '.jpg'); 
     }
 });
