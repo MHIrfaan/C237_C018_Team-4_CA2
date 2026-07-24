@@ -117,7 +117,8 @@
                                 <% if(u.role !== 'admin') { %>
                                     <div class="d-flex align-items-center gap-2">
                                         <div class="progress w-100" style="height: 8px;">
-                                           <span class="small text-muted fw-bold"><%= userProgress[u.id] || 0 %>%</span>
+                                            <!-- FIXED PROGRESS BAR HTML -->
+                                            <span class="small text-muted fw-bold"><%= userProgress[u.id] || 0 %>%</span>
                                         </div>
                                         <span class="small text-muted fw-bold"><%= userProgress[u.id] || 0 %>%</span>
                                     </div>
