@@ -99,9 +99,8 @@ app.post('/register', (req, res) => {
 
     let assignedRole = 'student'; 
     
-    // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
-        if (adminCode === 'admin') { // CHANGED to 'admin'
+        if (adminCode === 'admin') { // Admin password changed to 'admin'
             assignedRole = 'admin'; 
         } else {
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
@@ -125,10 +124,10 @@ app.post('/register', (req, res) => {
             return renderError("Username or Email already exists.");
         }
 
-        // Inserting the default profile picture into the database
+        // FIXED: Using "image" column to match your database schema
         const insertSql = `
-        INSERT INTO users (username,email,password,address,contact,role,profile_pic)
-        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon_2.webp')`;
+        INSERT INTO users (username,email,password,address,contact,role,image)
+        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
 
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed: " + err.message);
@@ -165,7 +164,7 @@ app.post('/login', (req, res) => {
             id: user.id, 
             username: user.username, 
             role: user.role,
-            profile_pic: user.profile_pic || 'profile_icon_2.webp' // Store DB image in session
+            image: user.image || 'profile_icon.webp' 
         };
 
         if (user.role === "admin") return res.redirect('/admin');
@@ -186,23 +185,22 @@ app.get('/profile/edit', checkAuth, (req, res) => {
     });
 });
 
-// Handling Multer Image Upload and text details
 app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
     const { username, email, contact, address, currentImage } = req.body;
 
-    let image = currentImage || 'profile_icon_2.webp'; 
+    let image = currentImage || 'profile_icon.webp'; 
     if (req.file) {
-        image = req.file.filename; // If a new file is uploaded, overwrite the old string
+        image = req.file.filename; 
     }
 
-    const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, profile_pic=? WHERE id=?`;
+    // FIXED: Updating "image" column
+    const sql = `UPDATE users SET username=?, email=?, address=?, contact=?, image=? WHERE id=?`;
     db.query(sql, [username, email, address, contact, image, userId], (err) => {
         if (err) return res.send("Error updating profile: " + err.message);
         
-        // Update session so Navbar changes instantly
         req.session.user.username = username;
-        req.session.user.profile_pic = image;
+        req.session.user.image = image;
         res.redirect('/dashboard');
     });
 });
@@ -210,7 +208,6 @@ app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
 // --- STUDENT DASHBOARD (READ) ---
 app.get('/dashboard', checkAuth, (req, res) => {
     const userId = req.session.user.id;
-    // FIXED: Selecting due_date as deadline
     const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY due_date ASC`;
     
     db.query(sql, [userId], (err, tasks) => {
@@ -239,7 +236,6 @@ app.post('/task/add', checkAuth, (req, res) => {
         return res.render('addTask', { error: 'Please complete all required fields.', formData, user: req.session.user });
     }
 
-    // FIXED: Inserting into due_date
     const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
     db.query(sql, [userId, title, description || null, module, task_type, priority, deadline, 'Pending'], (err, results) => {
         if (err) return res.render('addTask', { error: 'Unable to add task: ' + err.message, formData, user: req.session.user });
@@ -251,7 +247,6 @@ app.post('/task/add', checkAuth, (req, res) => {
 app.get('/task/edit/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
-    // FIXED: Selecting due_date as deadline
     const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
@@ -266,7 +261,6 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     const { title, description, module, task_type, priority, deadline, status } = req.body;
 
-    // FIXED: Updating due_date
     const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, due_date=?, status=? WHERE id=? AND user_id=?`;
     db.query(sql, [title, description, module, task_type, priority, deadline, status, taskId, userId], (err, results) => {
         if (err) return res.send("Error updating task: " + err.message);
@@ -310,10 +304,10 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role, profile_pic FROM users', (err, allUsers) => {
+    // FIXED: Requesting "image" column from users
+    db.query('SELECT id, username, email, role, image FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users: " + err.message); 
 
-        // FIXED: Using due_date
         const taskSql = `
             SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.due_date, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 

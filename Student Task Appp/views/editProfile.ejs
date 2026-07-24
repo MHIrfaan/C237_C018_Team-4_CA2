@@ -23,13 +23,16 @@
         </div>
         
         <div class="card-body p-4">
-            <form action="/profile/edit" method="POST">
+            <form action="/profile/edit" method="POST" enctype="multipart/form-data">
                 
                 <div class="text-center mb-4">
-                    <img src="/images/<%= userProfile.image || 'profile icon_5.webp' %>" onerror="this.onerror=null; this.src='/images/profile icon_5.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
+                    <!-- Updated to use userProfile.image dynamically from the database -->
+                    <img src="/images/<%= userProfile.image || 'profile_icon.webp' %>" onerror="this.onerror=null; this.src='/images/profile_icon.webp';" class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="Profile Image">
                     <div>
-                        <label class="form-label fw-semibold text-dark small">Update Image Filename</label>
-                        <input type="text" class="form-control form-control-sm text-center mx-auto" style="max-width: 250px;" name="image" value="<%= userProfile.image %>">
+                        <label class="form-label fw-semibold text-dark small">Upload New Avatar</label>
+                        <!-- Retains existing image if user updates name/email but doesn't upload a new file -->
+                        <input type="hidden" name="currentImage" value="<%= userProfile.image || 'profile_icon.webp' %>">
+                        <input type="file" class="form-control form-control-sm mx-auto" style="max-width: 250px;" name="image" accept="image/*">
                     </div>
                 </div>
 
