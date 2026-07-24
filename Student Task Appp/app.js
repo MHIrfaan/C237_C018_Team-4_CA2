@@ -2,27 +2,39 @@ const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
 const path = require('path');
+const multer = require('multer');
 
 const app = express();
 
 // ======================
-// DATABASE CONNECTION
+// THE NO-SQL IMAGE HACK
 // ======================
-const db = mysql.createConnection({
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public/images'); 
+    },
+    filename: (req, file, cb) => {
+        cb(null, 'profile_' + req.session.user.id + '.jpg'); 
+    }
+});
+const upload = multer({ storage: storage });
+
+// ======================
+// DATABASE CONNECTION (Upgraded to Pool)
+// ======================
+// A Pool automatically handles reconnecting if Azure drops the connection!
+const db = mysql.createPool({
     host: 'c237-sweekwang-mysql.mysql.database.azure.com',
     user: 'c237_018',
     password: 'c237018@2026!',
     database: 'c237_018_team4',
-    ssl: { rejectUnauthorized: true }
+    ssl: { rejectUnauthorized: true },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
-db.connect((err) => {
-    if (err) {
-        console.log("Database connection failed:", err);
-    } else {
-        console.log("Connected to MySQL");
-    }
-});
+console.log("Connected to MySQL Database Pool");
 
 // ======================
 // MIDDLEWARE
@@ -71,12 +83,11 @@ app.get('/', (req, res) => {
 app.get('/register', (req, res) => {
     res.render('register', {
         error: null, success: null,
-        username: '', email: '', address: '', contact: ''
+        username: '', email: '', address: '', contact: '', image: ''
     });
 });
 
 app.post('/register', (req, res) => {
-    // Extract the new adminCode from the form
     const { username, email, password, confirmPassword, address, contact, adminCode } = req.body;
 
     const renderError = (msg) => {
@@ -86,21 +97,16 @@ app.post('/register', (req, res) => {
         });
     };
 
-    // ==========================================
-    // STRICT ADMIN CODE VALIDATION
-    // ==========================================
-    let assignedRole = 'student'; // Default to student
+    let assignedRole = 'student'; 
     
-    // Check if the user typed ANYTHING into the admin code box
+    // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
-        if (adminCode === 'C237ADMIN') {
-            assignedRole = 'admin'; // Correct code -> make them an admin
+        if (adminCode === 'admin') {
+            assignedRole = 'admin'; 
         } else {
-            // Incorrect code -> throw an error!
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
         }
     }
-    // ==========================================
 
     if (!username || !email || !password || !confirmPassword || !address || !contact) {
         return renderError("Please fill in all required fields.");
@@ -123,7 +129,6 @@ app.post('/register', (req, res) => {
         INSERT INTO users (username,email,password,address,contact,role)
         VALUES (?, ?, SHA1(?), ?, ?, ?)`;
 
-        // Save the assignedRole (either 'student' or 'admin') to the database
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
             if (err) return res.send("Registration Failed");
             res.render('register', {
@@ -154,7 +159,12 @@ app.post('/login', (req, res) => {
         }
 
         const user = results[0];
-        req.session.user = { id: user.id, username: user.username, role: user.role };
+        req.session.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        profile_pic: user.profile_pic || 'profile_icon.webp'
+};
 
         if (user.role === "admin") return res.redirect('/admin');
         res.redirect('/dashboard');
@@ -163,6 +173,49 @@ app.post('/login', (req, res) => {
 
 app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/login'));
+});
+
+// --- EDIT PROFILE ---
+app.get('/profile/edit', checkAuth, (req, res) => {
+    const userId = req.session.user.id;
+    db.query('SELECT * FROM users WHERE id = ?', [userId], (err, results) => {
+        if (err || results.length === 0) return res.send("User not found.");
+        res.render('editProfile', { userProfile: results[0], user: req.session.user });
+    });
+});
+
+// Multer handles the image upload, SQL only handles the text details!
+app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
+    const userId = req.session.user.id;
+    const { username, email, contact, address, currentImage } = req.body;
+
+    let profilePic = currentImage || 'profile_icon.webp';
+
+    if (req.file) {
+        profilePic = req.file.filename;
+    }
+
+    const sql = `
+        UPDATE users
+        SET username=?, email=?, address=?, contact=?, profile_pic=?
+        WHERE id=?
+    `;
+
+    db.query(
+        sql,
+        [username, email, address, contact, profilePic, userId],
+        (err) => {
+            if (err) {
+                console.error("Error updating profile:", err);
+                return res.send("Error updating profile.");
+            }
+
+            req.session.user.username = username;
+            req.session.user.profile_pic = profilePic;
+
+            res.redirect('/dashboard');
+        }
+    );
 });
 
 // --- STUDENT DASHBOARD (READ) ---
@@ -176,157 +229,53 @@ app.get('/dashboard', checkAuth, (req, res) => {
     });
 });
 
-// --- ADD TASK (CREATE) ---
+// Display add-task page
 app.get('/task/add', checkAuth, (req, res) => {
     const defaultDeadline = req.query.deadline || '';
 
     res.render('addTask', {
         error: null,
         formData: {
+            title: '',
+            description: '',
+            module: '',
+            task_type: '',
+            priority: '',
             deadline: defaultDeadline
-        }
+        },
+        user: req.session.user
     });
 });
 
+// Add task to database 
 app.post('/task/add', checkAuth, (req, res) => {
     const userId = req.session.user.id;
+    let { title, description, module, task_type, priority, deadline } = req.body;
 
-    let {
-        title,
-        description,
-        module,
-        task_type,
-        priority,
-        deadline
-    } = req.body;
-
-    // Remove unnecessary spaces
     title = title ? title.trim() : '';
     description = description ? description.trim() : '';
     module = module ? module.trim().toUpperCase() : '';
 
-    const formData = {
-        title,
-        description,
-        module,
-        task_type,
-        priority,
-        deadline
-    };
+    const formData = { title, description, module, task_type, priority, deadline };
 
-    const validTaskTypes = [
-        'Assignment',
-        'Quiz',
-        'Project',
-        'Exam',
-        'Revision'
-    ];
-
-    const validPriorities = [
-        'High',
-        'Medium',
-        'Low'
-    ];
-
-    // Check required fields
-    if (
-        !title ||
-        !module ||
-        !task_type ||
-        !priority ||
-        !deadline
-    ) {
-        return res.render('addTask', {
-            error: 'Please complete all required fields.',
-            formData
-        });
-    }
-
-    // Check title length
-    if (title.length > 150) {
-        return res.render('addTask', {
-            error: 'Task title cannot exceed 150 characters.',
-            formData
-        });
-    }
-
-    // Check module length
-    if (module.length > 100) {
-        return res.render('addTask', {
-            error: 'Module cannot exceed 100 characters.',
-            formData
-        });
-    }
-
-    // Check accepted task type
-    if (!validTaskTypes.includes(task_type)) {
-        return res.render('addTask', {
-            error: 'Please select a valid task type.',
-            formData
-        });
-    }
-
-    // Check accepted priority
-    if (!validPriorities.includes(priority)) {
-        return res.render('addTask', {
-            error: 'Please select a valid priority.',
-            formData
-        });
-    }
-
-    // Check deadline
-    const selectedDate = new Date(deadline);
-    const today = new Date();
-
-    selectedDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-
-    if (
-        Number.isNaN(selectedDate.getTime()) ||
-        selectedDate < today
-    ) {
-        return res.render('addTask', {
-            error: 'The deadline cannot be before today.',
-            formData
-        });
+    // Required field validation
+    if (!title || !module || !task_type || !priority || !deadline) {
+        return res.render('addTask', { error: 'Please complete all required fields.', formData, user: req.session.user });
     }
 
     const sql = `
         INSERT INTO tasks
-        (
-            user_id,
-            title,
-            description,
-            module,
-            task_type,
-            priority,
-            deadline,
-            status
-        )
+        (user_id, title, description, module, task_type, priority, deadline, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    const values = [
-        userId,
-        title,
-        description || null,
-        module,
-        task_type,
-        priority,
-        deadline,
-        'Pending'
-    ];
+    const values = [userId, title, description || null, module, task_type, priority, deadline, 'Pending'];
 
     db.query(sql, values, (err, results) => {
         if (err) {
             console.error('Error adding task:', err);
-
-            return res.render('addTask', {
-                error: 'Unable to add the task. Please try again.',
-                formData
-            });
+            return res.render('addTask', { error: 'Unable to add the task. Please try again.', formData, user: req.session.user });
         }
-
         res.redirect('/dashboard');
     });
 });
@@ -350,7 +299,6 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     const { title, description, module, task_type, priority, deadline, status } = req.body;
 
     const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, deadline=?, status=? WHERE id=? AND user_id=?`;
-    
     db.query(sql, [title, description, module, task_type, priority, deadline, status, taskId, userId], (err, results) => {
         if (err) return res.send("Error updating task.");
         res.redirect('/dashboard');
@@ -368,7 +316,6 @@ app.post('/task/complete/:id', checkAuth, (req, res) => {
         if (results.length === 0) return res.send("Task not found.");
 
         const newStatus = results[0].status === 'Completed' ? 'Pending' : 'Completed';
-
         const updateSql = `UPDATE tasks SET status = ? WHERE id = ? AND user_id = ?`;
         db.query(updateSql, [newStatus, taskId, userId], (err) => {
             if (err) return res.send("Error updating task status.");
@@ -395,18 +342,25 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
-        if (err) return res.send("Error loading users.");
+    db.query('SELECT id, username, email, address, contact, role, profile_pic FROM users', (err, allUsers) => {
+        if (err) return res.send("Error loading users: " + err.message);
 
         const taskSql = `
-            SELECT tasks.id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
+            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
             ORDER BY tasks.deadline ASC
         `;
         
         db.query(taskSql, (err, allTasks) => {
-            if (err) return res.send("Error loading tasks.");
+            if (err) return res.send("Error loading tasks: " + err.message);
+
+            allUsers.forEach(u => {
+                const userTasks = allTasks.filter(t => t.user_id === u.id);
+                const userTotal = userTasks.length;
+                const userCompleted = userTasks.filter(t => t.status === 'Completed').length;
+                u.progress = userTotal === 0 ? 0 : Math.round((userCompleted / userTotal) * 100);
+            });
 
             const totalUsers = allUsers.length;
             const totalTasks = allTasks.length;
@@ -423,21 +377,98 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     });
 });
 
-app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
-    const userIdToDelete = req.params.id;
-    if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
+app.get('/admin/user/:id', checkAuth, checkAdmin, (req, res) => {
+    const selectedUserId = req.params.id;
 
-    db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
-        if (err) return res.send("Error deleting user.");
-        res.redirect('/admin');
+    const userSql = `
+        SELECT id, username, email, address, contact, role, profile_pic
+        FROM users
+        WHERE id = ?
+    `;
+
+    db.query(userSql, [selectedUserId], (err, userResults) => {
+        if (err) {
+            console.error("Error loading user profile:", err);
+            return res.status(500).send("Error loading user profile.");
+        }
+
+        if (userResults.length === 0) {
+            return res.status(404).send("User not found.");
+        }
+
+        const taskSql = `
+            SELECT
+                id,
+                title,
+                module,
+                task_type,
+                priority,
+                DATE_FORMAT(deadline, '%Y-%m-%d') AS deadline,
+                status
+            FROM tasks
+            WHERE user_id = ?
+            ORDER BY deadline ASC
+        `;
+
+        db.query(taskSql, [selectedUserId], (err, tasks) => {
+            if (err) {
+                console.error("Error loading user tasks:", err);
+                return res.status(500).send("Error loading user tasks.");
+            }
+
+            res.render('adminUserProfile', {
+                user: req.session.user,
+                profileUser: userResults[0],
+                tasks
+            });
+        });
     });
 });
 
-app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
-    db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
-        if (err) return res.send("Error deleting task.");
-        res.redirect('/admin');
-    });
+app.post('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
+    const userIdToDelete = req.params.id;
+
+    if (String(userIdToDelete) === String(req.session.user.id)) {
+        return res.send("You cannot delete your own admin account.");
+    }
+
+    db.query(
+        'DELETE FROM users WHERE id = ?',
+        [userIdToDelete],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting user:", err);
+                return res.send("Error deleting user.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("User not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
+});
+
+app.post('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
+    const taskId = req.params.id;
+
+    db.query(
+        'DELETE FROM tasks WHERE id = ?',
+        [taskId],
+        (err, results) => {
+            if (err) {
+                console.error("Error deleting task:", err);
+                return res.send("Error deleting task.");
+            }
+
+            if (results.affectedRows === 0) {
+                return res.send("Task not found.");
+            }
+
+            res.redirect('/admin');
+        }
+    );
 });
 
 // ======================

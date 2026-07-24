@@ -236,10 +236,20 @@
                 </svg>
                 StudyTrack
             </a>
+            
             <div class="d-flex align-items-center">
-                <span class="text-white me-3 opacity-75">Welcome back, <strong>
-                        <%= user.username %>
-                    </strong>!</span>
+                <!-- User Avatar added next to Welcome message -->
+                <img
+                    src="/images/<%= user.profile_pic || 'profile_icon.webp' %>"
+                    onerror="this.onerror=null; this.src='/images/profile_icon.webp';"
+                    alt="Avatar"
+                    class="rounded-circle me-2"
+                    style="width: 32px; height: 32px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);"
+                >
+                <span class="text-white me-3 opacity-75">Welcome back, <strong><%= user.username %></strong>!</span>
+                
+                <!-- Added Edit Profile Button -->
+                <a href="/profile/edit" class="btn btn-sm btn-outline-light me-2 fw-bold px-3">Edit Profile</a>
                 <a href="/logout" class="btn btn-sm btn-light text-primary fw-bold px-3">Logout</a>
             </div>
         </div>
@@ -497,13 +507,51 @@
             let currentMonth = today.getMonth();
             let currentYear = today.getFullYear();
 
+            // Treat deadlines as date-only values to prevent timezone shifts.
+            function normalizeDateOnly(value) {
+                if (!value) return '';
+
+                const textValue = String(value);
+
+                // MySQL/Express may return YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss...
+                const directMatch = textValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (directMatch) {
+                    return `${directMatch[1]}-${directMatch[2]}-${directMatch[3]}`;
+                }
+
+                const parsedDate = new Date(value);
+                if (Number.isNaN(parsedDate.getTime())) return '';
+
+                const year = parsedDate.getFullYear();
+                const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+                const day = String(parsedDate.getDate()).padStart(2, '0');
+
+                return `${year}-${month}-${day}`;
+            }
+
+            function makeDateKey(year, monthIndex, day) {
+                const month = String(monthIndex + 1).padStart(2, '0');
+                const date = String(day).padStart(2, '0');
+
+                return `${year}-${month}-${date}`;
+            }
+
+            function parseDateOnly(value) {
+                const normalized = normalizeDateOnly(value);
+                if (!normalized) return null;
+
+                const [year, month, day] = normalized.split('-').map(Number);
+                return new Date(year, month - 1, day);
+            }
+
             const taskMap = tasks.reduce((map, task) => {
-                const date = new Date(task.deadline);
-                if (!Number.isNaN(date.getTime())) {
-                    const key = date.toISOString().slice(0, 10);
+                const key = normalizeDateOnly(task.deadline);
+
+                if (key) {
                     map[key] = map[key] || [];
                     map[key].push(task.title);
                 }
+
                 return map;
             }, {});
 
@@ -533,7 +581,7 @@
 
                 for (let day = 1; day <= daysInMonth; day++) {
                     const date = new Date(year, month, day);
-                    const key = date.toISOString().slice(0, 10);
+                    const key = makeDateKey(year, month, day);
                     const dayCell = document.createElement('div');
                     dayCell.className = 'calendar-day';
                     dayCell.dataset.date = key;
@@ -590,9 +638,19 @@
 
             renderCalendar(currentMonth, currentYear);
 
+            const startOfToday = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate()
+            );
+
             const upcomingTasks = tasks
-                .map(task => ({ ...task, dueDate: new Date(task.deadline) }))
-                .filter(task => !Number.isNaN(task.dueDate.getTime()) && task.dueDate >= new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+                .map(task => ({
+                    ...task,
+                    deadlineKey: normalizeDateOnly(task.deadline),
+                    dueDate: parseDateOnly(task.deadline)
+                }))
+                .filter(task => task.dueDate && task.dueDate >= startOfToday)
                 .sort((a, b) => a.dueDate - b.dueDate)
                 .slice(0, 4);
 
@@ -604,7 +662,7 @@
                     item.className = 'mb-3';
                     item.innerHTML = `
                 <div class="fw-semibold">${task.title}</div>
-                <div class="text-muted small">${task.deadline}</div>
+                <div class="text-muted small">${task.deadlineKey}</div>
             `;
                     upcomingList.appendChild(item);
                 });
@@ -639,9 +697,16 @@
                             const orderB = statusOrder[b.dataset.status] ?? 99;
                             return orderA - orderB;
                         }
-                        const dateA = new Date(a.dataset.deadline);
-                        const dateB = new Date(b.dataset.deadline);
-                        return sortValue === 'deadline-desc' ? dateB - dateA : dateA - dateB;
+                        const dateA = parseDateOnly(a.dataset.deadline);
+                        const dateB = parseDateOnly(b.dataset.deadline);
+
+                        if (!dateA && !dateB) return 0;
+                        if (!dateA) return 1;
+                        if (!dateB) return -1;
+
+                        return sortValue === 'deadline-desc'
+                            ? dateB - dateA
+                            : dateA - dateB;
                     });
 
                     sortedRows.forEach(row => tasksTableBody.appendChild(row));
