@@ -160,13 +160,12 @@ app.post('/login', (req, res) => {
         }
 
         const user = results[0];
-        req.session.user = { 
-            id: user.id, 
-            username: user.username, 
-            role: user.role,
-            // Fallback since DB doesn't have an image column
-            image: 'profile icon_5.webp' 
-        };
+        req.session.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        profile_pic: user.profile_pic || 'profile_icon.webp'
+};
 
         if (user.role === "admin") return res.redirect('/admin');
         res.redirect('/dashboard');
@@ -344,7 +343,7 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
+    db.query('SELECT id, username, email, address, contact, role, profile_pic FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users: " + err.message);
 
         const taskSql = `
@@ -374,6 +373,54 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
                 users: allUsers,
                 tasks: allTasks,
                 stats: { totalUsers, totalTasks, completionRate }
+            });
+        });
+    });
+});
+
+app.get('/admin/user/:id', checkAuth, checkAdmin, (req, res) => {
+    const selectedUserId = req.params.id;
+
+    const userSql = `
+        SELECT id, username, email, address, contact, role, profile_pic
+        FROM users
+        WHERE id = ?
+    `;
+
+    db.query(userSql, [selectedUserId], (err, userResults) => {
+        if (err) {
+            console.error("Error loading user profile:", err);
+            return res.status(500).send("Error loading user profile.");
+        }
+
+        if (userResults.length === 0) {
+            return res.status(404).send("User not found.");
+        }
+
+        const taskSql = `
+            SELECT
+                id,
+                title,
+                module,
+                task_type,
+                priority,
+                DATE_FORMAT(deadline, '%Y-%m-%d') AS deadline,
+                status
+            FROM tasks
+            WHERE user_id = ?
+            ORDER BY deadline ASC
+        `;
+
+        db.query(taskSql, [selectedUserId], (err, tasks) => {
+            if (err) {
+                console.error("Error loading user tasks:", err);
+                return res.status(500).send("Error loading user tasks.");
+            }
+
+            res.render('adminUserProfile', {
+                user: req.session.user,
+                profileUser: userResults[0],
+                tasks
             });
         });
     });
