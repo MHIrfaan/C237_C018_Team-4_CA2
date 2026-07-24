@@ -2,18 +2,20 @@ const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
 const path = require('path');
-const multer = require('multer'); // Added for file uploads
+const multer = require('multer'); // Used for file uploads like your reference app
+
 const app = express();
 
 // ======================
-// FILE UPLOAD SETUP (MULTER)
+// THE NO-SQL IMAGE HACK
 // ======================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'public/images'); // Make sure to create a public/images folder
+        cb(null, 'public/images'); 
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
+        // We force the filename to be the user's ID so the database doesn't need to remember it!
+        cb(null, 'profile_' + req.session.user.id + '.jpg'); 
     }
 });
 const upload = multer({ storage: storage });
@@ -44,7 +46,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public')); // Ensure 'public' folder exists for images
+app.use(express.static('public'));
 
 app.use(session({
     secret: 'studytrack_secret_key',
@@ -84,7 +86,7 @@ app.get('/', (req, res) => {
 app.get('/register', (req, res) => {
     res.render('register', {
         error: null, success: null,
-        username: '', email: '', address: '', contact: ''
+        username: '', email: '', address: '', contact: '', image: ''
     });
 });
 
@@ -99,8 +101,10 @@ app.post('/register', (req, res) => {
     };
 
     let assignedRole = 'student'; 
+    
+    // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
-        if (adminCode === 'C237ADMIN') {
+        if (adminCode === 'admin') {
             assignedRole = 'admin'; 
         } else {
             return renderError("Invalid Admin Code. Leave this blank if you are a student.");
@@ -119,18 +123,17 @@ app.post('/register', (req, res) => {
 
     const checkSql = "SELECT * FROM users WHERE username=? OR email=?";
     db.query(checkSql, [username, email], (err, results) => {
-        if (err) return res.send("Database Error");
+        if (err) return res.send("Database Error: " + err.message);
         if (results.length > 0) {
             return renderError("Username or Email already exists.");
         }
 
-        // Added profile_pic default assignment 
         const insertSql = `
-        INSERT INTO users (username,email,password,address,contact,role,profile_pic)
-        VALUES (?, ?, SHA1(?), ?, ?, ?, 'profile_icon.webp')`;
+        INSERT INTO users (username,email,password,address,contact,role)
+        VALUES (?, ?, SHA1(?), ?, ?, ?)`;
 
         db.query(insertSql, [username, email, password, address, contact, assignedRole], (err, result) => {
-            if (err) return res.send("Registration Failed");
+            if (err) return res.send("Registration Failed: " + err.message);
             res.render('register', {
                 error: null, 
                 success: "Registration successful! You will now be redirected to login.",
@@ -153,18 +156,18 @@ app.post('/login', (req, res) => {
 
     const sql = `SELECT * FROM users WHERE username=? AND password=SHA1(?)`;
     db.query(sql, [username, password], (err, results) => {
-        if (err) return res.send("Database Error");
+        if (err) return res.send("Database Error: " + err.message);
         if (results.length == 0) {
             return res.render('login', { error: "Invalid username or password." });
         }
 
         const user = results[0];
-        // Added profile_pic to session
         req.session.user = { 
             id: user.id, 
             username: user.username, 
             role: user.role,
-            profile_pic: user.profile_pic || 'profile_icon.webp' 
+            // Fallback since DB doesn't have an image column
+            image: 'profile icon_5.webp' 
         };
 
         if (user.role === "admin") return res.redirect('/admin');
@@ -176,32 +179,24 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/login'));
 });
 
-// --- PROFILE ROUTES (NEW) ---
-app.get('/profile', checkAuth, (req, res) => {
+// --- EDIT PROFILE ---
+app.get('/profile/edit', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     db.query('SELECT * FROM users WHERE id = ?', [userId], (err, results) => {
         if (err || results.length === 0) return res.send("User not found.");
-        res.render('profile', { user: results[0] });
+        res.render('editProfile', { userProfile: results[0], user: req.session.user });
     });
 });
 
-app.post('/profile', checkAuth, upload.single('image'), (req, res) => {
+// Multer handles the image upload, SQL only handles the text details!
+app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
-    const { username, email, address, contact, currentImage } = req.body;
-    
-    let image = currentImage || 'profile_icon.webp'; 
-    if (req.file) {
-        image = req.file.filename; 
-    }
+    const { username, email, contact, address } = req.body;
 
-    const sql = 'UPDATE users SET username=?, email=?, address=?, contact=?, profile_pic=? WHERE id=?';
-    db.query(sql, [username, email, address, contact, image, userId], (err) => {
-        if (err) return res.send("Error updating profile");
-        
-        // Update session data
+    const sql = `UPDATE users SET username=?, email=?, address=?, contact=? WHERE id=?`;
+    db.query(sql, [username, email, address, contact, userId], (err) => {
+        if (err) return res.send("Error updating profile: " + err.message);
         req.session.user.username = username;
-        req.session.user.profile_pic = image;
-        
         res.redirect('/dashboard');
     });
 });
@@ -212,81 +207,28 @@ app.get('/dashboard', checkAuth, (req, res) => {
     const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY deadline ASC`;
     
     db.query(sql, [userId], (err, tasks) => {
-        if (err) return res.send("Error fetching tasks.");
+        if (err) return res.send("Error fetching tasks: " + err.message);
         res.render('dashboard', { user: req.session.user, tasks: tasks });
     });
 });
 
-// Display add-task page
+// --- ADD TASK (CREATE) ---
 app.get('/task/add', checkAuth, (req, res) => {
     const defaultDeadline = req.query.deadline || '';
-
-    res.render('addTask', {
-        error: null,
-        formData: {
-            title: '',
-            description: '',
-            module: '',
-            task_type: '',
-            priority: '',
-            deadline: defaultDeadline
-        }
-    });
+    res.render('addTask', { error: null, formData: { deadline: defaultDeadline }, user: req.session.user });
 });
 
-// Add task to database
 app.post('/task/add', checkAuth, (req, res) => {
     const userId = req.session.user.id;
-
     let { title, description, module, task_type, priority, deadline } = req.body;
 
     title = title ? title.trim() : '';
     description = description ? description.trim() : '';
     module = module ? module.trim().toUpperCase() : '';
 
-    const formData = { title, description, module, task_type, priority, deadline };
-
-    const validTaskTypes = ['Assignment', 'Quiz', 'Exam', 'Project', 'Study Session'];
-    const validPriorities = ['High', 'Medium', 'Low'];
-
-    if (!title || !module || !task_type || !priority || !deadline) {
-        return res.render('addTask', { error: 'Please complete all required fields.', formData });
-    }
-    if (title.length > 150) {
-        return res.render('addTask', { error: 'Task title cannot exceed 150 characters.', formData });
-    }
-    if (description.length > 1000) {
-        return res.render('addTask', { error: 'Description cannot exceed 1000 characters.', formData });
-    }
-    if (module.length > 100) {
-        return res.render('addTask', { error: 'Module cannot exceed 100 characters.', formData });
-    }
-    if (!validTaskTypes.includes(task_type)) {
-        return res.render('addTask', { error: 'Please select a valid task type.', formData });
-    }
-    if (!validPriorities.includes(priority)) {
-        return res.render('addTask', { error: 'Please select a valid priority.', formData });
-    }
-
-    const selectedDeadline = new Date(`${deadline}T00:00:00`);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (Number.isNaN(selectedDeadline.getTime())) {
-        return res.render('addTask', { error: 'Please enter a valid deadline.', formData });
-    }
-    if (selectedDeadline < today) {
-        return res.render('addTask', { error: 'The deadline cannot be before today.', formData });
-    }
-
     const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    const values = [userId, title, description || null, module, task_type, priority, deadline, 'Pending'];
-
-    db.query(sql, values, (err, results) => {
-        if (err) {
-            console.error('Error adding task:', err);
-            return res.render('addTask', { error: 'Unable to add the task. Please try again.', formData });
-        }
+    db.query(sql, [userId, title, description || null, module, task_type, priority, deadline, 'Pending'], (err, results) => {
+        if (err) return res.send("Error adding task: " + err.message);
         res.redirect('/dashboard');
     });
 });
@@ -298,7 +240,7 @@ app.get('/task/edit/:id', checkAuth, (req, res) => {
     const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Database error.");
+        if (err) return res.send("Database error: " + err.message);
         if (results.length === 0) return res.send("Task not found.");
         res.render('editTask', { task: results[0] });
     });
@@ -310,28 +252,26 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     const { title, description, module, task_type, priority, deadline, status } = req.body;
 
     const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, deadline=?, status=? WHERE id=? AND user_id=?`;
-    
     db.query(sql, [title, description, module, task_type, priority, deadline, status, taskId, userId], (err, results) => {
-        if (err) return res.send("Error updating task.");
+        if (err) return res.send("Error updating task: " + err.message);
         res.redirect('/dashboard');
     });
 });
 
-// --- MARK TASK AS COMPLETED / UNCOMPLETED (UPDATE) --- 
+// --- MARK TASK AS COMPLETED / UNCOMPLETED (UPDATE) ---
 app.post('/task/complete/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
 
     const checkSql = `SELECT status FROM tasks WHERE id = ? AND user_id = ?`;
     db.query(checkSql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Error checking task.");
+        if (err) return res.send("Error checking task: " + err.message);
         if (results.length === 0) return res.send("Task not found.");
 
         const newStatus = results[0].status === 'Completed' ? 'Pending' : 'Completed';
-
         const updateSql = `UPDATE tasks SET status = ? WHERE id = ? AND user_id = ?`;
         db.query(updateSql, [newStatus, taskId, userId], (err) => {
-            if (err) return res.send("Error updating task status.");
+            if (err) return res.send("Error updating task status: " + err.message);
             res.redirect('/dashboard');
         });
     });
@@ -344,7 +284,7 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
     const sql = `DELETE FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
-        if (err) return res.send("Error deleting task.");
+        if (err) return res.send("Error deleting task: " + err.message);
         if (results.affectedRows === 0) return res.send("Task not found or not yours.");
         res.redirect('/dashboard');
     });
@@ -355,41 +295,38 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    db.query('SELECT id, username, email, role, profile_pic FROM users', (err, allUsers) => {
-        if (err) return res.send("Error loading users.");
+    // FIXED: Removed 'profile_pic' from the SQL query since the database doesn't have that column!
+    db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
+        if (err) return res.send("Error loading users: " + err.message); 
 
         const taskSql = `
-            SELECT tasks.id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
+            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
             ORDER BY tasks.deadline ASC
         `;
         
         db.query(taskSql, (err, allTasks) => {
-            if (err) return res.send("Error loading tasks.");
+            if (err) return res.send("Error loading tasks: " + err.message);
+
+            allUsers.forEach(u => {
+                const userTasks = allTasks.filter(t => t.user_id === u.id);
+                const userTotal = userTasks.length;
+                const userCompleted = userTasks.filter(t => t.status === 'Completed').length;
+                u.progress = userTotal === 0 ? 0 : Math.round((userCompleted / userTotal) * 100);
+            });
 
             const totalUsers = allUsers.length;
             const totalTasks = allTasks.length;
             const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
             const completionRate = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-            // Calculate progress for each student
-            const userProgress = {};
-            allUsers.forEach(u => {
-                if (u.role === 'student') {
-                    const userTasks = allTasks.filter(t => t.username === u.username);
-                    const t_total = userTasks.length;
-                    const t_completed = userTasks.filter(t => t.status === 'Completed').length;
-                    userProgress[u.id] = t_total === 0 ? 0 : Math.round((t_completed / t_total) * 100);
-                }
-            });
-
             res.render('admin', { 
                 user: req.session.user, 
                 users: allUsers,
                 tasks: allTasks,
                 stats: { totalUsers, totalTasks, completionRate },
-                userProgress: userProgress // Added progress mapping
+                userProgress: allUsers.reduce((acc, user) => { acc[user.id] = user.progress; return acc; }, {}) // Added to safely pass progress to EJS
             });
         });
     });
@@ -400,14 +337,14 @@ app.get('/admin/delete_user/:id', checkAuth, checkAdmin, (req, res) => {
     if (userIdToDelete == req.session.user.id) return res.send("You cannot delete your own admin account.");
 
     db.query('DELETE FROM users WHERE id = ?', [userIdToDelete], (err) => {
-        if (err) return res.send("Error deleting user.");
+        if (err) return res.send("Error deleting user: " + err.message);
         res.redirect('/admin');
     });
 });
 
 app.get('/admin/delete_task/:id', checkAuth, checkAdmin, (req, res) => {
     db.query('DELETE FROM tasks WHERE id = ?', [req.params.id], (err) => {
-        if (err) return res.send("Error deleting task.");
+        if (err) return res.send("Error deleting task: " + err.message);
         res.redirect('/admin');
     });
 });
