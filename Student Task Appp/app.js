@@ -2,42 +2,38 @@ const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
 const path = require('path');
-const multer = require('multer'); // Used for file uploads like your reference app
+const multer = require('multer');
 
 const app = express();
 
 // ======================
-// THE NO-SQL IMAGE HACK
+// FILE UPLOAD SETUP
 // ======================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'public/images'); 
     },
     filename: (req, file, cb) => {
-        // We force the filename to be the user's ID so the database doesn't need to remember it!
         cb(null, 'profile_' + req.session.user.id + '.jpg'); 
     }
 });
 const upload = multer({ storage: storage });
 
 // ======================
-// DATABASE CONNECTION
+// DATABASE CONNECTION (POOL)
 // ======================
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: 'c237-sweekwang-mysql.mysql.database.azure.com',
     user: 'c237_018',
     password: 'c237018@2026!',
     database: 'c237_018_team4',
-    ssl: { rejectUnauthorized: true }
+    ssl: { rejectUnauthorized: true },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
-db.connect((err) => {
-    if (err) {
-        console.log("Database connection failed:", err);
-    } else {
-        console.log("Connected to MySQL");
-    }
-});
+console.log("Connected to MySQL Database Pool");
 
 // ======================
 // MIDDLEWARE
@@ -102,7 +98,6 @@ app.post('/register', (req, res) => {
 
     let assignedRole = 'student'; 
     
-    // Check if the user typed the exact admin code
     if (adminCode && adminCode.trim() !== '') {
         if (adminCode === 'admin') {
             assignedRole = 'admin'; 
@@ -166,7 +161,6 @@ app.post('/login', (req, res) => {
             id: user.id, 
             username: user.username, 
             role: user.role,
-            // Fallback since DB doesn't have an image column
             image: 'profile icon_5.webp' 
         };
 
@@ -188,7 +182,6 @@ app.get('/profile/edit', checkAuth, (req, res) => {
     });
 });
 
-// Multer handles the image upload, SQL only handles the text details!
 app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
     const userId = req.session.user.id;
     const { username, email, contact, address } = req.body;
@@ -204,7 +197,8 @@ app.post('/profile/edit', checkAuth, upload.single('image'), (req, res) => {
 // --- STUDENT DASHBOARD (READ) ---
 app.get('/dashboard', checkAuth, (req, res) => {
     const userId = req.session.user.id;
-    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY deadline ASC`;
+    // FIXED: Selecting due_date as deadline
+    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE user_id = ? ORDER BY due_date ASC`;
     
     db.query(sql, [userId], (err, tasks) => {
         if (err) return res.send("Error fetching tasks: " + err.message);
@@ -226,7 +220,8 @@ app.post('/task/add', checkAuth, (req, res) => {
     description = description ? description.trim() : '';
     module = module ? module.trim().toUpperCase() : '';
 
-    const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    // FIXED: Inserting into due_date column
+    const sql = `INSERT INTO tasks (user_id, title, description, module, task_type, priority, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
     db.query(sql, [userId, title, description || null, module, task_type, priority, deadline, 'Pending'], (err, results) => {
         if (err) return res.send("Error adding task: " + err.message);
         res.redirect('/dashboard');
@@ -237,12 +232,13 @@ app.post('/task/add', checkAuth, (req, res) => {
 app.get('/task/edit/:id', checkAuth, (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.user.id;
-    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(deadline, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
+    // FIXED: Selecting due_date as deadline
+    const sql = `SELECT id, title, description, module, task_type, priority, DATE_FORMAT(due_date, '%Y-%m-%d') as deadline, status FROM tasks WHERE id = ? AND user_id = ?`;
 
     db.query(sql, [taskId, userId], (err, results) => {
         if (err) return res.send("Database error: " + err.message);
         if (results.length === 0) return res.send("Task not found.");
-        res.render('editTask', { task: results[0] });
+        res.render('editTask', { task: results[0], user: req.session.user });
     });
 });
 
@@ -251,7 +247,8 @@ app.post('/task/edit/:id', checkAuth, (req, res) => {
     const userId = req.session.user.id;
     const { title, description, module, task_type, priority, deadline, status } = req.body;
 
-    const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, deadline=?, status=? WHERE id=? AND user_id=?`;
+    // FIXED: Updating due_date column
+    const sql = `UPDATE tasks SET title=?, description=?, module=?, task_type=?, priority=?, due_date=?, status=? WHERE id=? AND user_id=?`;
     db.query(sql, [title, description, module, task_type, priority, deadline, status, taskId, userId], (err, results) => {
         if (err) return res.send("Error updating task: " + err.message);
         res.redirect('/dashboard');
@@ -295,15 +292,15 @@ app.post('/task/delete/:id', checkAuth, (req, res) => {
 // ======================
 app.get('/admin', checkAuth, checkAdmin, (req, res) => {
     
-    // FIXED: Removed 'profile_pic' from the SQL query since the database doesn't have that column!
     db.query('SELECT id, username, email, role FROM users', (err, allUsers) => {
         if (err) return res.send("Error loading users: " + err.message); 
 
+        // FIXED: Using due_date instead of deadline
         const taskSql = `
-            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.deadline, '%Y-%m-%d') as deadline, users.username 
+            SELECT tasks.id, tasks.user_id, tasks.title, tasks.module, tasks.status, DATE_FORMAT(tasks.due_date, '%Y-%m-%d') as deadline, users.username 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
-            ORDER BY tasks.deadline ASC
+            ORDER BY tasks.due_date ASC
         `;
         
         db.query(taskSql, (err, allTasks) => {
@@ -326,7 +323,7 @@ app.get('/admin', checkAuth, checkAdmin, (req, res) => {
                 users: allUsers,
                 tasks: allTasks,
                 stats: { totalUsers, totalTasks, completionRate },
-                userProgress: allUsers.reduce((acc, user) => { acc[user.id] = user.progress; return acc; }, {}) // Added to safely pass progress to EJS
+                userProgress: allUsers.reduce((acc, user) => { acc[user.id] = user.progress; return acc; }, {})
             });
         });
     });
